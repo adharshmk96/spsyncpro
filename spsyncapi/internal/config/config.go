@@ -20,6 +20,7 @@ type Config struct {
 	Metrics         MetricsConfig
 	DB              DBConfig
 	Auth            AuthConfig
+	Encryption      EncryptionConfig
 }
 
 // DBConfig holds database connection settings.
@@ -34,6 +35,11 @@ type AuthConfig struct {
 	AccessTokenTTL   time.Duration
 	SessionTTL       time.Duration
 	PasswordResetTTL time.Duration
+}
+
+// EncryptionConfig holds settings for encrypting sensitive values at rest.
+type EncryptionConfig struct {
+	Secret string
 }
 
 // MetricsConfig controls OpenTelemetry metric export.
@@ -73,6 +79,9 @@ func Load() (*Config, error) {
 			SessionTTL:       viper.GetDuration("auth.session_ttl"),
 			PasswordResetTTL: viper.GetDuration("auth.password_reset_ttl"),
 		},
+		Encryption: EncryptionConfig{
+			Secret: viper.GetString("encryption.secret"),
+		},
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -100,6 +109,13 @@ func setDefaults() {
 	viper.SetDefault("auth.access_token_ttl", 15*time.Minute)
 	viper.SetDefault("auth.session_ttl", 30*24*time.Hour)
 	viper.SetDefault("auth.password_reset_ttl", 30*time.Minute)
+}
+
+func (e *EncryptionConfig) validate() error {
+	if strings.TrimSpace(e.Secret) == "" {
+		return fmt.Errorf("encryption.secret must not be empty")
+	}
+	return nil
 }
 
 func (c *Config) validate() error {
@@ -134,6 +150,10 @@ func (c *Config) validate() error {
 	}
 
 	if err := c.Auth.validate(); err != nil {
+		return err
+	}
+
+	if err := c.Encryption.validate(); err != nil {
 		return err
 	}
 

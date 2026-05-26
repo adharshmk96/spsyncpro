@@ -1,1 +1,46 @@
 GET http://localhost:8080/api/v1/health
+
+### Login (use token for organization calls)
+# @name login
+POST http://localhost:8080/api/v1/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "password123"
+}
+
+### Create organization
+POST http://localhost:8080/api/v1/organizations
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.token}}
+
+{
+  "name": "Acme Corp",
+  "tenant_id": "00000000-0000-0000-0000-000000000001",
+  "client_id": "app-client-id",
+  "tenant_secret": "client-secret-value"
+}
+
+### List organizations
+GET http://localhost:8080/api/v1/organizations
+Authorization: Bearer {{login.response.body.token}}
+
+### Get organization
+GET http://localhost:8080/api/v1/organizations/{{orgId}}
+Authorization: Bearer {{login.response.body.token}}
+
+### Update organization (omit tenant_secret to keep existing)
+PUT http://localhost:8080/api/v1/organizations/{{orgId}}
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.token}}
+
+{
+  "name": "Acme Corp Updated",
+  "tenant_id": "00000000-0000-0000-0000-000000000001",
+  "client_id": "app-client-id"
+}
+
+### Delete organization (soft delete)
+DELETE http://localhost:8080/api/v1/organizations/{{orgId}}
+Authorization: Bearer {{login.response.body.token}}

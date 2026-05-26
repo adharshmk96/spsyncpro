@@ -15,10 +15,11 @@ import (
 
 // Deps carries all handler and middleware dependencies needed at route registration.
 type Deps struct {
-	AuthHandler *handlers.AuthHandler
-	AuthService *auth.Service
-	JWTConfig   auth.JWTConfig
-	Logger      *slog.Logger
+	AuthHandler         *handlers.AuthHandler
+	OrganizationHandler *handlers.OrganizationHandler
+	AuthService         *auth.Service
+	JWTConfig           auth.JWTConfig
+	Logger              *slog.Logger
 }
 
 // Register wires all routes onto the provided engine.
@@ -44,6 +45,12 @@ func Register(router *gin.Engine, deps Deps) {
 			protected.GET("/me", deps.AuthHandler.Me)
 			protected.POST("/logout", deps.AuthHandler.Logout)
 			protected.POST("/change-password", deps.AuthHandler.ChangePassword)
+
+			protected.POST("/organizations", deps.OrganizationHandler.Create)
+			protected.GET("/organizations", deps.OrganizationHandler.List)
+			protected.GET("/organizations/:id", deps.OrganizationHandler.Get)
+			protected.PUT("/organizations/:id", deps.OrganizationHandler.Update)
+			protected.DELETE("/organizations/:id", deps.OrganizationHandler.Delete)
 		}
 	}
 }

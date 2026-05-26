@@ -9,8 +9,10 @@ import (
 
 	"spsyncapi/internal/auth"
 	"spsyncapi/internal/config"
+	"spsyncapi/internal/crypto"
 	"spsyncapi/internal/handlers"
 	"spsyncapi/internal/middleware"
+	"spsyncapi/internal/organization"
 	"spsyncapi/internal/routes"
 	"spsyncapi/internal/storage"
 	"spsyncapi/internal/telemetry"
@@ -45,6 +47,7 @@ func New(cfg *config.Config, logger *slog.Logger, metrics *telemetry.HTTPMetrics
 	memberRepo := storage.NewMemberRepository(db)
 	sessionRepo := storage.NewSessionRepository(db)
 	resetRepo := storage.NewPasswordResetRepository(db)
+	orgRepo := storage.NewOrganizationRepository(db)
 
 	// --- JWT config --------------------------------------------------------
 	jwtCfg := auth.JWTConfig{
@@ -67,6 +70,20 @@ func New(cfg *config.Config, logger *slog.Logger, metrics *telemetry.HTTPMetrics
 		return nil, fmt.Errorf("create auth service: %w", err)
 	}
 
+	encryptor, err := crypto.NewSecretEncryptor(cfg.Encryption.Secret)
+	if err != nil {
+		return nil, fmt.Errorf("create secret encryptor: %w", err)
+	}
+
+	orgSvc, err := organization.NewService(organization.ServiceConfig{
+		Repo:      orgRepo,
+		Encryptor: encryptor,
+		Logger:    logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create organization service: %w", err)
+	}
+
 	// --- gin engine --------------------------------------------------------
 	gin.SetMode(cfg.GinMode)
 
@@ -75,10 +92,11 @@ func New(cfg *config.Config, logger *slog.Logger, metrics *telemetry.HTTPMetrics
 	engine.Use(middleware.Observability(logger, metrics))
 
 	routes.Register(engine, routes.Deps{
-		AuthHandler: handlers.NewAuthHandler(authSvc, logger),
-		AuthService: authSvc,
-		JWTConfig:   jwtCfg,
-		Logger:      logger,
+		AuthHandler:         handlers.NewAuthHandler(authSvc, logger),
+		OrganizationHandler: handlers.NewOrganizationHandler(orgSvc, logger),
+		AuthService:         authSvc,
+		JWTConfig:           jwtCfg,
+		Logger:              logger,
 	})
 
 	return &Server{

@@ -43,3 +43,16 @@ type PasswordResetToken struct {
 func (p *PasswordResetToken) IsValid() bool {
 	return p.UsedAt == nil && time.Now().Before(p.ExpiresAt)
 }
+
+// Organization stores Microsoft Entra / SharePoint tenant connection details.
+// TenantSecretEncrypted holds AES-GCM ciphertext; the plaintext is never persisted.
+type Organization struct {
+	ID                    string    `gorm:"primaryKey;type:text"`
+	Name                  string    `gorm:"not null;type:text"`
+	TenantID              string    `gorm:"column:tenant_id;not null;uniqueIndex;type:text"`
+	ClientID              string    `gorm:"column:client_id;not null;type:text"`
+	TenantSecretEncrypted string    `gorm:"column:tenant_secret_encrypted;not null;type:text"`
+	Active                bool      `gorm:"not null;default:true;index"`
+	CreatedAt             time.Time `gorm:"not null"`
+	UpdatedAt             time.Time `gorm:"not null"`
+}

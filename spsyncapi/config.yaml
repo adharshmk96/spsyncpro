@@ -25,3 +25,6 @@ auth:
   access_token_ttl: 15m
   session_ttl: 720h   # 30 days
   password_reset_ttl: 30m
+
+encryption:
+  secret: change-me-encryption-key-in-production
