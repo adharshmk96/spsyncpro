@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"spsyncapi/internal/auth"
+	"spsyncapi/internal/bucketstore"
 	"spsyncapi/internal/config"
 	"spsyncapi/internal/crypto"
 	"spsyncapi/internal/handlers"
@@ -48,6 +49,7 @@ func New(cfg *config.Config, logger *slog.Logger, metrics *telemetry.HTTPMetrics
 	sessionRepo := storage.NewSessionRepository(db)
 	resetRepo := storage.NewPasswordResetRepository(db)
 	orgRepo := storage.NewOrganizationRepository(db)
+	bucketStoreRepo := storage.NewBucketStoreRepository(db)
 
 	// --- JWT config --------------------------------------------------------
 	jwtCfg := auth.JWTConfig{
@@ -84,6 +86,15 @@ func New(cfg *config.Config, logger *slog.Logger, metrics *telemetry.HTTPMetrics
 		return nil, fmt.Errorf("create organization service: %w", err)
 	}
 
+	bucketStoreSvc, err := bucketstore.NewService(bucketstore.ServiceConfig{
+		Repo:      bucketStoreRepo,
+		Encryptor: encryptor,
+		Logger:    logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create bucket store service: %w", err)
+	}
+
 	// --- gin engine --------------------------------------------------------
 	gin.SetMode(cfg.GinMode)
 
@@ -94,6 +105,7 @@ func New(cfg *config.Config, logger *slog.Logger, metrics *telemetry.HTTPMetrics
 	routes.Register(engine, routes.Deps{
 		AuthHandler:         handlers.NewAuthHandler(authSvc, logger),
 		OrganizationHandler: handlers.NewOrganizationHandler(orgSvc, logger),
+		BucketStoreHandler:  handlers.NewBucketStoreHandler(bucketStoreSvc, logger),
 		AuthService:         authSvc,
 		JWTConfig:           jwtCfg,
 		Logger:              logger,

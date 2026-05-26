@@ -44,3 +44,53 @@ Authorization: Bearer {{login.response.body.token}}
 ### Delete organization (soft delete)
 DELETE http://localhost:8080/api/v1/organizations/{{orgId}}
 Authorization: Bearer {{login.response.body.token}}
+
+### Create S3 bucket store
+POST http://localhost:8080/api/v1/bucket-stores
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.token}}
+
+{
+  "bucket_name": "backup-primary",
+  "bucket_type": "s3",
+  "config": {
+    "server": "https://s3.example.com",
+    "access_key": "ACCESS_KEY",
+    "secret_key": "SECRET_KEY"
+  }
+}
+
+### Create Azure bucket store
+POST http://localhost:8080/api/v1/bucket-stores
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.token}}
+
+{
+  "bucket_name": "azure-backup",
+  "bucket_type": "azure",
+  "config": {
+    "connection_string": "DefaultEndpointsProtocol=https;AccountName=..."
+  }
+}
+
+### List bucket stores
+GET http://localhost:8080/api/v1/bucket-stores
+Authorization: Bearer {{login.response.body.token}}
+
+### Get bucket store
+GET http://localhost:8080/api/v1/bucket-stores/{{bucketStoreId}}
+Authorization: Bearer {{login.response.body.token}}
+
+### Update bucket store (omit config to keep existing)
+PUT http://localhost:8080/api/v1/bucket-stores/{{bucketStoreId}}
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.token}}
+
+{
+  "bucket_name": "backup-primary-updated",
+  "bucket_type": "s3"
+}
+
+### Delete bucket store (soft delete)
+DELETE http://localhost:8080/api/v1/bucket-stores/{{bucketStoreId}}
+Authorization: Bearer {{login.response.body.token}}

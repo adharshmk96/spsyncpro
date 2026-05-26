@@ -44,6 +44,24 @@ func (p *PasswordResetToken) IsValid() bool {
 	return p.UsedAt == nil && time.Now().Before(p.ExpiresAt)
 }
 
+// BucketType identifies the object storage backend.
+const (
+	BucketTypeS3    = "s3"
+	BucketTypeAzure = "azure"
+)
+
+// BucketStore holds object storage connection details for backup targets.
+// ConfigEncrypted holds AES-GCM ciphertext of JSON config; plaintext is never persisted.
+type BucketStore struct {
+	ID              string    `gorm:"primaryKey;type:text"`
+	BucketName      string    `gorm:"column:bucket_name;not null;uniqueIndex;type:text"`
+	BucketType      string    `gorm:"column:bucket_type;not null;type:text"`
+	ConfigEncrypted string    `gorm:"column:config_encrypted;not null;type:text"`
+	Active          bool      `gorm:"not null;default:true;index"`
+	CreatedAt       time.Time `gorm:"not null"`
+	UpdatedAt       time.Time `gorm:"not null"`
+}
+
 // Organization stores Microsoft Entra / SharePoint tenant connection details.
 // TenantSecretEncrypted holds AES-GCM ciphertext; the plaintext is never persisted.
 type Organization struct {

@@ -17,6 +17,7 @@ import (
 type Deps struct {
 	AuthHandler         *handlers.AuthHandler
 	OrganizationHandler *handlers.OrganizationHandler
+	BucketStoreHandler  *handlers.BucketStoreHandler
 	AuthService         *auth.Service
 	JWTConfig           auth.JWTConfig
 	Logger              *slog.Logger
@@ -51,6 +52,12 @@ func Register(router *gin.Engine, deps Deps) {
 			protected.GET("/organizations/:id", deps.OrganizationHandler.Get)
 			protected.PUT("/organizations/:id", deps.OrganizationHandler.Update)
 			protected.DELETE("/organizations/:id", deps.OrganizationHandler.Delete)
+
+			protected.POST("/bucket-stores", deps.BucketStoreHandler.Create)
+			protected.GET("/bucket-stores", deps.BucketStoreHandler.List)
+			protected.GET("/bucket-stores/:id", deps.BucketStoreHandler.Get)
+			protected.PUT("/bucket-stores/:id", deps.BucketStoreHandler.Update)
+			protected.DELETE("/bucket-stores/:id", deps.BucketStoreHandler.Delete)
 		}
 	}
 }
