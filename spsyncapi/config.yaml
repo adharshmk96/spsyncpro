@@ -15,3 +15,13 @@ metrics:
   otlp_endpoint: localhost:4318
   otlp_insecure: true
   export_interval: 15s
+
+db:
+  sqlite_path: ./data/spsyncapi.sqlite
+
+auth:
+  jwt_secret: change-me-in-production
+  jwt_issuer: spsyncapi
+  access_token_ttl: 15m
+  session_ttl: 720h   # 30 days
+  password_reset_ttl: 30m

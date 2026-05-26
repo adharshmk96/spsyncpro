@@ -58,6 +58,12 @@ go run . serve --config /path/to/config.yaml
 | `metrics.otlp_endpoint` | `localhost:4318` | `SPSYNCAPI_METRICS_OTLP_ENDPOINT` |
 | `metrics.otlp_insecure` | `true` | `SPSYNCAPI_METRICS_OTLP_INSECURE` |
 | `metrics.export_interval` | `15s` | `SPSYNCAPI_METRICS_EXPORT_INTERVAL` |
+| `db.sqlite_path` | `./data/spsyncapi.sqlite` | `SPSYNCAPI_DB_SQLITE_PATH` |
+| `auth.jwt_secret` | *(required)* | `SPSYNCAPI_AUTH_JWT_SECRET` |
+| `auth.jwt_issuer` | `spsyncapi` | `SPSYNCAPI_AUTH_JWT_ISSUER` |
+| `auth.access_token_ttl` | `15m` | `SPSYNCAPI_AUTH_ACCESS_TOKEN_TTL` |
+| `auth.session_ttl` | `720h` | `SPSYNCAPI_AUTH_SESSION_TTL` |
+| `auth.password_reset_ttl` | `30m` | `SPSYNCAPI_AUTH_PASSWORD_RESET_TTL` |
 
 Set `metrics.enabled` to `false` when no OTLP collector is available; request logging still works via slog.
 

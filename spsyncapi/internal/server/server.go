@@ -7,9 +7,12 @@ import (
 	"log/slog"
 	"net/http"
 
+	"spsyncapi/internal/auth"
 	"spsyncapi/internal/config"
+	"spsyncapi/internal/handlers"
 	"spsyncapi/internal/middleware"
 	"spsyncapi/internal/routes"
+	"spsyncapi/internal/storage"
 	"spsyncapi/internal/telemetry"
 
 	"github.com/gin-gonic/gin"
@@ -33,13 +36,50 @@ func New(cfg *config.Config, logger *slog.Logger, metrics *telemetry.HTTPMetrics
 		return nil, fmt.Errorf("metrics is required")
 	}
 
+	// --- storage -----------------------------------------------------------
+	db, err := storage.Open(cfg.DB.SQLitePath)
+	if err != nil {
+		return nil, fmt.Errorf("open database: %w", err)
+	}
+
+	memberRepo := storage.NewMemberRepository(db)
+	sessionRepo := storage.NewSessionRepository(db)
+	resetRepo := storage.NewPasswordResetRepository(db)
+
+	// --- JWT config --------------------------------------------------------
+	jwtCfg := auth.JWTConfig{
+		Secret:    []byte(cfg.Auth.JWTSecret),
+		Issuer:    cfg.Auth.JWTIssuer,
+		AccessTTL: cfg.Auth.AccessTokenTTL,
+	}
+
+	// --- auth service ------------------------------------------------------
+	authSvc, err := auth.NewService(auth.ServiceConfig{
+		Members:    memberRepo,
+		Sessions:   sessionRepo,
+		Resets:     resetRepo,
+		JWTConfig:  jwtCfg,
+		SessionTTL: cfg.Auth.SessionTTL,
+		ResetTTL:   cfg.Auth.PasswordResetTTL,
+		Logger:     logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create auth service: %w", err)
+	}
+
+	// --- gin engine --------------------------------------------------------
 	gin.SetMode(cfg.GinMode)
 
 	engine := gin.New()
 	engine.Use(gin.Recovery())
 	engine.Use(middleware.Observability(logger, metrics))
 
-	routes.Register(engine)
+	routes.Register(engine, routes.Deps{
+		AuthHandler: handlers.NewAuthHandler(authSvc, logger),
+		AuthService: authSvc,
+		JWTConfig:   jwtCfg,
+		Logger:      logger,
+	})
 
 	return &Server{
 		cfg:    cfg,

@@ -18,6 +18,22 @@ type Config struct {
 	WriteTimeout    time.Duration
 	ShutdownTimeout time.Duration
 	Metrics         MetricsConfig
+	DB              DBConfig
+	Auth            AuthConfig
+}
+
+// DBConfig holds database connection settings.
+type DBConfig struct {
+	SQLitePath string
+}
+
+// AuthConfig holds JWT and auth lifecycle settings.
+type AuthConfig struct {
+	JWTSecret        string
+	JWTIssuer        string
+	AccessTokenTTL   time.Duration
+	SessionTTL       time.Duration
+	PasswordResetTTL time.Duration
 }
 
 // MetricsConfig controls OpenTelemetry metric export.
@@ -47,6 +63,16 @@ func Load() (*Config, error) {
 			OTLPInsecure:   viper.GetBool("metrics.otlp_insecure"),
 			ExportInterval: viper.GetDuration("metrics.export_interval"),
 		},
+		DB: DBConfig{
+			SQLitePath: viper.GetString("db.sqlite_path"),
+		},
+		Auth: AuthConfig{
+			JWTSecret:        viper.GetString("auth.jwt_secret"),
+			JWTIssuer:        viper.GetString("auth.jwt_issuer"),
+			AccessTokenTTL:   viper.GetDuration("auth.access_token_ttl"),
+			SessionTTL:       viper.GetDuration("auth.session_ttl"),
+			PasswordResetTTL: viper.GetDuration("auth.password_reset_ttl"),
+		},
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -69,6 +95,11 @@ func setDefaults() {
 	viper.SetDefault("metrics.otlp_endpoint", "localhost:4318")
 	viper.SetDefault("metrics.otlp_insecure", true)
 	viper.SetDefault("metrics.export_interval", 15*time.Second)
+	viper.SetDefault("db.sqlite_path", "./data/spsyncapi.sqlite")
+	viper.SetDefault("auth.jwt_issuer", "spsyncapi")
+	viper.SetDefault("auth.access_token_ttl", 15*time.Minute)
+	viper.SetDefault("auth.session_ttl", 30*24*time.Hour)
+	viper.SetDefault("auth.password_reset_ttl", 30*time.Minute)
 }
 
 func (c *Config) validate() error {
@@ -102,6 +133,26 @@ func (c *Config) validate() error {
 		return err
 	}
 
+	if err := c.Auth.validate(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (a *AuthConfig) validate() error {
+	if strings.TrimSpace(a.JWTSecret) == "" {
+		return fmt.Errorf("auth.jwt_secret must not be empty")
+	}
+	if a.AccessTokenTTL <= 0 {
+		return fmt.Errorf("invalid auth.access_token_ttl: %s", a.AccessTokenTTL)
+	}
+	if a.SessionTTL <= 0 {
+		return fmt.Errorf("invalid auth.session_ttl: %s", a.SessionTTL)
+	}
+	if a.PasswordResetTTL <= 0 {
+		return fmt.Errorf("invalid auth.password_reset_ttl: %s", a.PasswordResetTTL)
+	}
 	return nil
 }
 
