@@ -3,11 +3,14 @@ package routes
 import (
 	"log/slog"
 
+	_ "spsyncapi/docs"
 	"spsyncapi/internal/auth"
 	"spsyncapi/internal/handlers"
 	"spsyncapi/internal/middleware"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 // Deps carries all handler and middleware dependencies needed at route registration.
@@ -20,6 +23,8 @@ type Deps struct {
 
 // Register wires all routes onto the provided engine.
 func Register(router *gin.Engine, deps Deps) {
+	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+
 	healthHandler := handlers.NewHealthHandler()
 
 	v1 := router.Group("/api/v1")

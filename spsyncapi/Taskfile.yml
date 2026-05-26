@@ -1,0 +1,38 @@
+version: "3"
+
+vars:
+  BIN_DIR: bin
+  SWAG_VERSION: v1.16.6
+  SWAG_CMD: go run github.com/swaggo/swag/cmd/swag@{{.SWAG_VERSION}}
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  run:
+    desc: Start the API server
+    cmds:
+      - SPSYNCAPI_METRICS_ENABLED=false SPSYNCAPI_LOG_LEVEL=debug go run . serve
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test ./...
+
+  spec:
+    desc: Generate OpenAPI spec (swagger.json / swagger.yaml)
+    cmds:
+      - "{{.SWAG_CMD}} init -g main.go -o docs --parseDependency --parseInternal"
+
+  build:
+    desc: Build the API binary
+    cmds:
+      - mkdir -p {{.BIN_DIR}}
+      - go build -o {{.BIN_DIR}}/spsyncapi .
+
+  tidy:
+    desc: Tidy Go module dependencies
+    cmds:
+      - go mod tidy

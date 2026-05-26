@@ -59,10 +59,29 @@ type successResponse struct {
 	Success bool `json:"success"`
 }
 
+type errorResponse struct {
+	Error string `json:"error" example:"invalid request"`
+}
+
+type meResponse struct {
+	User auth.MemberDetails `json:"user"`
+}
+
 // --- handlers --------------------------------------------------------------
 
 // Register creates a new member account.
-// POST /api/v1/register
+//
+// @Summary      Register
+// @Description  Creates a new member account and returns a JWT access token
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      registerRequest  true  "Registration payload"
+// @Success      201   {object}  tokenResponse
+// @Failure      400   {object}  errorResponse
+// @Failure      409   {object}  errorResponse
+// @Failure      500   {object}  errorResponse
+// @Router       /register [post]
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req registerRequest
 	if !bindJSON(c, &req) {
@@ -82,7 +101,18 @@ func (h *AuthHandler) Register(c *gin.Context) {
 }
 
 // Login authenticates a member and returns a JWT.
-// POST /api/v1/login
+//
+// @Summary      Login
+// @Description  Authenticates a member and returns a JWT access token
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      loginRequest  true  "Login payload"
+// @Success      200   {object}  tokenResponse
+// @Failure      400   {object}  errorResponse
+// @Failure      401   {object}  errorResponse
+// @Failure      500   {object}  errorResponse
+// @Router       /login [post]
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req loginRequest
 	if !bindJSON(c, &req) {
@@ -102,7 +132,17 @@ func (h *AuthHandler) Login(c *gin.Context) {
 }
 
 // Me returns the authenticated member's profile.
-// GET /api/v1/me
+//
+// @Summary      Current user
+// @Description  Returns the authenticated member profile
+// @Tags         auth
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  meResponse
+// @Failure      401  {object}  errorResponse
+// @Failure      404  {object}  errorResponse
+// @Failure      500  {object}  errorResponse
+// @Router       /me [get]
 func (h *AuthHandler) Me(c *gin.Context) {
 	memberID := middleware.GetMemberID(c)
 	if memberID == "" {
@@ -116,11 +156,20 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"user": details})
+	c.JSON(http.StatusOK, meResponse{User: *details})
 }
 
 // Logout revokes the current session.
-// POST /api/v1/logout
+//
+// @Summary      Logout
+// @Description  Revokes the current session
+// @Tags         auth
+// @Produce      json
+// @Security     BearerAuth
+// @Success      200  {object}  successResponse
+// @Failure      401  {object}  errorResponse
+// @Failure      500  {object}  errorResponse
+// @Router       /logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
 	sessionID := middleware.GetSessionID(c)
 	if sessionID == "" {
@@ -138,7 +187,17 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 }
 
 // ForgotPassword triggers a password-reset flow.
-// POST /api/v1/forgot-password
+//
+// @Summary      Forgot password
+// @Description  Starts a password reset flow for the given email
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      forgotPasswordRequest  true  "Email address"
+// @Success      200   {object}  successResponse
+// @Failure      400   {object}  errorResponse
+// @Failure      500   {object}  errorResponse
+// @Router       /forgot-password [post]
 func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 	var req forgotPasswordRequest
 	if !bindJSON(c, &req) {
@@ -154,7 +213,17 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 }
 
 // ResetPassword completes a password reset using a token.
-// POST /api/v1/reset-password
+//
+// @Summary      Reset password
+// @Description  Completes a password reset using the emailed token
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        body  body      resetPasswordRequest  true  "Reset payload"
+// @Success      200   {object}  successResponse
+// @Failure      400   {object}  errorResponse
+// @Failure      500   {object}  errorResponse
+// @Router       /reset-password [post]
 func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	var req resetPasswordRequest
 	if !bindJSON(c, &req) {
@@ -174,7 +243,19 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 }
 
 // ChangePassword changes the password for the authenticated member.
-// POST /api/v1/change-password
+//
+// @Summary      Change password
+// @Description  Changes the password for the authenticated member
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        body  body      changePasswordRequest  true  "Password change payload"
+// @Success      200   {object}  successResponse
+// @Failure      400   {object}  errorResponse
+// @Failure      401   {object}  errorResponse
+// @Failure      500   {object}  errorResponse
+// @Router       /change-password [post]
 func (h *AuthHandler) ChangePassword(c *gin.Context) {
 	var req changePasswordRequest
 	if !bindJSON(c, &req) {

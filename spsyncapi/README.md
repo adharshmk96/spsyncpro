@@ -5,16 +5,56 @@ HTTP API server for the SPSync platform, built with Cobra, Viper, and Gin.
 ## Requirements
 
 - Go 1.26+
+- [Task](https://taskfile.dev/) (optional, for common commands)
+
+## Tasks
+
+From the project root with [Task](https://taskfile.dev/) installed:
+
+| Task | Description |
+| --- | --- |
+| `task run` | Start the API server (`go run . serve`) |
+| `task test` | Run all tests (`go test ./...`) |
+| `task spec` | Regenerate OpenAPI docs under `docs/` |
+| `task build` | Build `bin/spsyncapi` |
+| `task tidy` | Run `go mod tidy` |
+
+Without Task, use the equivalent `go` commands directly (see sections below).
 
 ## Run
 
 From the project root:
 
 ```bash
+task run
+# or
 go run . serve
 ```
 
 The server listens on `0.0.0.0:8080` by default.
+
+## OpenAPI / Swagger
+
+API documentation is generated with [swaggo/swag](https://github.com/swaggo/swag) from handler annotations.
+
+Regenerate the spec after changing routes or handlers:
+
+```bash
+task spec
+```
+
+Artifacts:
+
+- `docs/swagger.json` / `docs/swagger.yaml` — OpenAPI 2.0 spec
+- `docs/docs.go` — embedded spec for the UI
+
+With the server running, browse interactive docs at:
+
+```text
+http://localhost:8080/swagger/index.html
+```
+
+Protected endpoints use **BearerAuth**: set `Authorization` to `Bearer <token>` from login or register.
 
 ## Health check
 
@@ -85,15 +125,17 @@ go build -o bin/spsyncapi .
 ```text
 .
 ├── cmd/                 # Cobra CLI commands
+├── docs/                # Generated OpenAPI spec (run task spec)
 ├── internal/
 │   ├── config/          # Configuration loading and validation
-│   ├── handlers/        # HTTP handlers
+│   ├── handlers/        # HTTP handlers (swag annotations)
 │   ├── middleware/      # HTTP middleware (logging, metrics)
 │   ├── routes/          # Route registration
 │   ├── server/          # HTTP server setup and lifecycle
 │   └── telemetry/       # OpenTelemetry metrics setup
 ├── config.yaml          # Example/default config
-├── main.go              # Application entrypoint
+├── main.go              # Application entrypoint + API metadata
+├── Taskfile.yml         # Task runner definitions
 └── go.mod
 ```
 
