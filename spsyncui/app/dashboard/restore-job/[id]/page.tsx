@@ -8,14 +8,14 @@ import { Card } from "@/components/ui/card";
 import {
   formatDateTime,
   formatFileSize,
-  formatJobType,
   formatLogStatus,
-} from "@/lib/backup-jobs/format";
+  formatRunMode,
+} from "@/lib/restore-jobs/format";
 import {
-  getPlaceholderBackupJobById,
-  getPlaceholderBackupJobLogs,
-} from "@/lib/backup-jobs/placeholder-data";
-import type { BackupConfig, BackupJob, BackupJobFilter } from "@/lib/backup-jobs/types";
+  getPlaceholderRestoreJobById,
+  getPlaceholderRestoreJobLogs,
+} from "@/lib/restore-jobs/placeholder-data";
+import type { RestoreConfig, RestoreJob, RestoreJobFilter } from "@/lib/restore-jobs/types";
 
 function ConfigRow({ label, value }: { label: string; value: string }) {
   return (
@@ -26,7 +26,7 @@ function ConfigRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function FilterConfigSection({ filter }: { filter: BackupJobFilter }) {
+function FilterConfigSection({ filter }: { filter: RestoreJobFilter }) {
   return (
     <div className="space-y-2 text-sm">
       <ConfigRow label="Document libraries" value={filter.documentLibraryList.join(", ")} />
@@ -40,7 +40,7 @@ function FilterConfigSection({ filter }: { filter: BackupJobFilter }) {
   );
 }
 
-function BackupConfigSection({ config }: { config: BackupConfig }) {
+function RestoreConfigSection({ config }: { config: RestoreConfig }) {
   if (config.bucketType === "s3") {
     return (
       <div className="space-y-2 text-sm">
@@ -62,17 +62,20 @@ function BackupConfigSection({ config }: { config: BackupConfig }) {
   );
 }
 
-function JobConfigSection({ job }: { job: BackupJob }) {
+function JobConfigSection({ job }: { job: RestoreJob }) {
   return (
     <Card className="p-6">
       <h2 className="text-lg font-semibold">Job configuration</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        One-time restore from bucket to SharePoint.
+      </p>
       <div className="mt-4 space-y-6">
         <div className="space-y-2 text-sm">
           <ConfigRow label="Job ID" value={job.id} />
           <ConfigRow label="SharePoint site URL" value={job.sharepointSiteUrl} />
-          <ConfigRow label="Job type" value={formatJobType(job.jobType)} />
+          <ConfigRow label="Run mode" value={formatRunMode(job.runMode)} />
+          <ConfigRow label="Scheduled at" value={formatDateTime(job.scheduledAt)} />
           <ConfigRow label="Last run at" value={formatDateTime(job.lastRunAt)} />
-          <ConfigRow label="Next run at" value={formatDateTime(job.nextRunAt)} />
           <ConfigRow label="Created at" value={formatDateTime(job.createdAt)} />
           <ConfigRow label="Updated at" value={formatDateTime(job.updatedAt)} />
         </div>
@@ -83,27 +86,27 @@ function JobConfigSection({ job }: { job: BackupJob }) {
         </div>
 
         <div>
-          <h3 className="mb-2 text-sm font-semibold">Backup destination</h3>
-          <BackupConfigSection config={job.backupConfig} />
+          <h3 className="mb-2 text-sm font-semibold">Source bucket</h3>
+          <RestoreConfigSection config={job.restoreConfig} />
         </div>
       </div>
     </Card>
   );
 }
 
-export default function DashboardBackupJobDetailPage() {
+export default function DashboardRestoreJobDetailPage() {
   const params = useParams<{ id: string }>();
   const jobId = params.id ?? "";
-  const job = getPlaceholderBackupJobById(jobId);
-  const logs = getPlaceholderBackupJobLogs(jobId);
+  const job = getPlaceholderRestoreJobById(jobId);
+  const logs = getPlaceholderRestoreJobLogs(jobId);
 
   if (!job) {
     return (
       <main className="p-6">
         <Card className="p-6">
-          <p className="text-sm text-destructive">Backup job not found.</p>
+          <p className="text-sm text-destructive">Restore job not found.</p>
           <Button asChild variant="outline" className="mt-4">
-            <Link href="/dashboard/backup-job/list">Back to list</Link>
+            <Link href="/dashboard/restore-job/list">Back to list</Link>
           </Button>
         </Card>
       </main>
@@ -114,11 +117,13 @@ export default function DashboardBackupJobDetailPage() {
     <main className="p-6">
       <div className="mb-6 flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Backup job detail</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{job.sharepointSiteUrl}</p>
+          <h1 className="text-2xl font-semibold">Restore job detail</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {job.sharepointSiteUrl} · bucket → SharePoint
+          </p>
         </div>
         <Button asChild variant="outline">
-          <Link href="/dashboard/backup-job/list">Back to list</Link>
+          <Link href="/dashboard/restore-job/list">Back to list</Link>
         </Button>
       </div>
 
@@ -149,7 +154,7 @@ export default function DashboardBackupJobDetailPage() {
                     </p>
                   </div>
                   <Button asChild variant="outline" size="sm">
-                    <Link href={`/dashboard/backup-job/${job.id}/logs/${log.id}`}>Detail</Link>
+                    <Link href={`/dashboard/restore-job/${job.id}/logs/${log.id}`}>Detail</Link>
                   </Button>
                 </div>
               ))}

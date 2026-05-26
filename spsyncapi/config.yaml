@@ -1,0 +1,17 @@
+server:
+  host: 0.0.0.0
+  port: 8080
+  gin_mode: release
+  read_timeout: 15s
+  write_timeout: 15s
+  shutdown_timeout: 10s
+
+log:
+  level: info
+
+metrics:
+  enabled: true
+  service_name: spsyncapi
+  otlp_endpoint: localhost:4318
+  otlp_insecure: true
+  export_interval: 15s

@@ -1,67 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-
-type BackupJob = {
-  id: string;
-  siteUrl: string;
-  documentLibraryList: string[];
-  runMode: "IMMEDIATE" | "ONE_TIME_AT" | "RECURRING";
-  recurrence: "DAILY" | "WEEKLY" | "MONTHLY" | null;
-  startAt: string | null;
-  status: "ACTIVE" | "PAUSED";
-  createdAt: string;
-  nextRunAt: string | null;
-  lastRunAt: string | null;
-  lastRunStatus: "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED" | null;
-};
-
-function formatSchedule(job: BackupJob): string {
-  if (job.runMode === "IMMEDIATE") {
-    return "Immediate";
-  }
-
-  if (job.runMode === "ONE_TIME_AT") {
-    return `One-time at ${job.startAt ? new Date(job.startAt).toLocaleString() : "-"}`;
-  }
-
-  return `${job.recurrence ?? "Recurring"} from ${
-    job.startAt ? new Date(job.startAt).toLocaleString() : "-"
-  }`;
-}
+import {
+  formatBackupConfigSummary,
+  formatDateTime,
+  formatFilterSummary,
+  formatJobType,
+} from "@/lib/backup-jobs/format";
+import { getPlaceholderBackupJobs } from "@/lib/backup-jobs/placeholder-data";
 
 export default function DashboardBackupJobListPage() {
-  const [jobs, setJobs] = useState<BackupJob[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    const loadJobs = async () => {
-      setIsLoading(true);
-      setErrorMessage(null);
-
-      try {
-        const response = await fetch("/api/backup-jobs");
-        const data = (await response.json()) as { jobs?: BackupJob[]; error?: string };
-        if (!response.ok) {
-          throw new Error(data.error ?? "Failed to load backup jobs.");
-        }
-
-        setJobs(data.jobs ?? []);
-      } catch (error) {
-        console.error("Failed to load backup jobs.", error);
-        setErrorMessage(error instanceof Error ? error.message : "Failed to load backup jobs.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    void loadJobs();
-  }, []);
+  const jobs = getPlaceholderBackupJobs();
 
   return (
     <main className="p-6">
@@ -75,10 +27,7 @@ export default function DashboardBackupJobListPage() {
         </Button>
       </div>
 
-      {isLoading ? <p className="text-sm text-muted-foreground">Loading jobs...</p> : null}
-      {errorMessage ? <p className="text-sm text-destructive">{errorMessage}</p> : null}
-
-      {!isLoading && !errorMessage && jobs.length === 0 ? (
+      {jobs.length === 0 ? (
         <Card className="p-4 text-sm text-muted-foreground">No backup jobs created yet.</Card>
       ) : null}
 
@@ -87,23 +36,23 @@ export default function DashboardBackupJobListPage() {
           <Card key={job.id} className="p-4">
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">
-                <p className="font-semibold">{job.siteUrl}</p>
+                <p className="font-semibold">{job.sharepointSiteUrl}</p>
+                <p className="text-sm text-muted-foreground">{formatFilterSummary(job.filter)}</p>
                 <p className="text-sm text-muted-foreground">
-                  Libraries: {job.documentLibraryList.join(", ")}
-                </p>
-                <p className="text-sm text-muted-foreground">Schedule: {formatSchedule(job)}</p>
-                <p className="text-sm text-muted-foreground">Status: {job.status}</p>
-                <p className="text-sm text-muted-foreground">
-                  Next Run: {job.nextRunAt ? new Date(job.nextRunAt).toLocaleString() : "-"}
+                  Job type: {formatJobType(job.jobType)}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Last Run: {job.lastRunAt ? new Date(job.lastRunAt).toLocaleString() : "-"}
+                  Backup: {formatBackupConfigSummary(job.backupConfig)}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Last Run Status: {job.lastRunStatus ?? "-"}
+                  Next run: {formatDateTime(job.nextRunAt)}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  Created: {new Date(job.createdAt).toLocaleString()}
+                  Last run: {formatDateTime(job.lastRunAt)}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Created: {formatDateTime(job.createdAt)} · Updated:{" "}
+                  {formatDateTime(job.updatedAt)}
                 </p>
               </div>
               <Button asChild variant="outline">
