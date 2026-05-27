@@ -15,6 +15,268 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/backup-jobs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns all active backup jobs",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup-jobs"
+                ],
+                "summary": "List backup jobs",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.backupJobListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a backup job with schedule and job configuration",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup-jobs"
+                ],
+                "summary": "Create backup job",
+                "parameters": [
+                    {
+                        "description": "Backup job payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.createBackupJobRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.backupJobResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/backup-jobs/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns an active backup job by ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup-jobs"
+                ],
+                "summary": "Get backup job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Backup job ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.backupJobResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates a backup job and replaces schedule + job config",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup-jobs"
+                ],
+                "summary": "Update backup job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Backup job ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Backup job payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.updateBackupJobRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.backupJobResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Marks a backup job inactive; the record is retained",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup-jobs"
+                ],
+                "summary": "Delete backup job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Backup job ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.successResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/bucket-stores": {
             "get": {
                 "security": [
@@ -932,6 +1194,98 @@ const docTemplate = `{
                 }
             }
         },
+        "backupjob.BackupJobDetails": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "end_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "job_config": {
+                    "$ref": "#/definitions/backupjob.JobConfigDetails"
+                },
+                "last_run": {
+                    "type": "string"
+                },
+                "next_run": {
+                    "type": "string"
+                },
+                "schedule": {
+                    "$ref": "#/definitions/backupjob.ScheduleDetails"
+                },
+                "start_at": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "backupjob.FilterDetails": {
+            "type": "object",
+            "properties": {
+                "created_after": {
+                    "type": "string"
+                },
+                "created_before": {
+                    "type": "string"
+                },
+                "document_libraries": {
+                    "type": "string"
+                },
+                "max_file_size": {
+                    "type": "integer"
+                },
+                "min_file_size": {
+                    "type": "integer"
+                },
+                "updated_after": {
+                    "type": "string"
+                },
+                "updated_before": {
+                    "type": "string"
+                }
+            }
+        },
+        "backupjob.JobConfigDetails": {
+            "type": "object",
+            "properties": {
+                "bucket_store": {
+                    "type": "string"
+                },
+                "filters": {
+                    "$ref": "#/definitions/backupjob.FilterDetails"
+                },
+                "organization": {
+                    "type": "string"
+                },
+                "share_point_site": {
+                    "type": "string"
+                }
+            }
+        },
+        "backupjob.ScheduleDetails": {
+            "type": "object",
+            "properties": {
+                "cron": {
+                    "type": "string"
+                },
+                "interval": {
+                    "type": "integer"
+                },
+                "one_time": {
+                    "type": "string"
+                }
+            }
+        },
         "bucketstore.BucketStoreDetails": {
             "type": "object",
             "properties": {
@@ -948,6 +1302,90 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.backupJobConfigRequest": {
+            "type": "object",
+            "required": [
+                "bucket_store",
+                "organization",
+                "share_point_site"
+            ],
+            "properties": {
+                "bucket_store": {
+                    "type": "string"
+                },
+                "filters": {
+                    "$ref": "#/definitions/handlers.backupJobFiltersRequest"
+                },
+                "organization": {
+                    "type": "string"
+                },
+                "share_point_site": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.backupJobFiltersRequest": {
+            "type": "object",
+            "properties": {
+                "created_after": {
+                    "type": "string"
+                },
+                "created_before": {
+                    "type": "string"
+                },
+                "document_libraries": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "max_file_size": {
+                    "type": "integer"
+                },
+                "min_file_size": {
+                    "type": "integer"
+                },
+                "updated_after": {
+                    "type": "string"
+                },
+                "updated_before": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.backupJobListResponse": {
+            "type": "object",
+            "properties": {
+                "backup_jobs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backupjob.BackupJobDetails"
+                    }
+                }
+            }
+        },
+        "handlers.backupJobResponse": {
+            "type": "object",
+            "properties": {
+                "backup_job": {
+                    "$ref": "#/definitions/backupjob.BackupJobDetails"
+                }
+            }
+        },
+        "handlers.backupJobScheduleRequest": {
+            "type": "object",
+            "properties": {
+                "cron": {
+                    "type": "string"
+                },
+                "interval": {
+                    "type": "integer"
+                },
+                "one_time": {
                     "type": "string"
                 }
             }
@@ -982,6 +1420,36 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "new_password": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.createBackupJobRequest": {
+            "type": "object",
+            "required": [
+                "job_config",
+                "schedule"
+            ],
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "end_at": {
+                    "type": "string"
+                },
+                "job_config": {
+                    "$ref": "#/definitions/handlers.backupJobConfigRequest"
+                },
+                "last_run": {
+                    "type": "string"
+                },
+                "next_run": {
+                    "type": "string"
+                },
+                "schedule": {
+                    "$ref": "#/definitions/handlers.backupJobScheduleRequest"
+                },
+                "start_at": {
                     "type": "string"
                 }
             }
@@ -1147,6 +1615,36 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "token": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.updateBackupJobRequest": {
+            "type": "object",
+            "required": [
+                "job_config",
+                "schedule"
+            ],
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "end_at": {
+                    "type": "string"
+                },
+                "job_config": {
+                    "$ref": "#/definitions/handlers.backupJobConfigRequest"
+                },
+                "last_run": {
+                    "type": "string"
+                },
+                "next_run": {
+                    "type": "string"
+                },
+                "schedule": {
+                    "$ref": "#/definitions/handlers.backupJobScheduleRequest"
+                },
+                "start_at": {
                     "type": "string"
                 }
             }

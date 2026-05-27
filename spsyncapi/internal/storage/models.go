@@ -6,11 +6,11 @@ import (
 
 // Member represents a registered user account.
 type Member struct {
-	ID           string     `gorm:"primaryKey;type:text"`
-	Email        string     `gorm:"uniqueIndex;not null;type:text"`
-	PasswordHash string     `gorm:"not null;type:text"`
-	CreatedAt    time.Time  `gorm:"not null"`
-	UpdatedAt    time.Time  `gorm:"not null"`
+	ID           string    `gorm:"primaryKey;type:text"`
+	Email        string    `gorm:"uniqueIndex;not null;type:text"`
+	PasswordHash string    `gorm:"not null;type:text"`
+	CreatedAt    time.Time `gorm:"not null"`
+	UpdatedAt    time.Time `gorm:"not null"`
 }
 
 // Session represents an active login session for a member.
@@ -73,4 +73,35 @@ type Organization struct {
 	Active                bool      `gorm:"not null;default:true;index"`
 	CreatedAt             time.Time `gorm:"not null"`
 	UpdatedAt             time.Time `gorm:"not null"`
+}
+
+// BackupJob defines a scheduled backup configuration and execution window metadata.
+type BackupJob struct {
+	ID string `gorm:"primaryKey;type:text"`
+
+	LastRun *time.Time `gorm:"column:last_run;type:datetime"`
+	NextRun *time.Time `gorm:"column:next_run;type:datetime"`
+	StartAt *time.Time `gorm:"column:start_at;type:datetime"`
+	EndAt   *time.Time `gorm:"column:end_at;type:datetime"`
+
+	ScheduleIntervalSeconds *int64     `gorm:"column:schedule_interval_seconds"`
+	ScheduleCron            *string    `gorm:"column:schedule_cron;type:text"`
+	ScheduleOneTime         *time.Time `gorm:"column:schedule_one_time;type:datetime"`
+
+	Active bool `gorm:"not null;default:true;index"`
+
+	OrganizationID string `gorm:"column:organization_id;not null;type:text;index"`
+	BucketStoreID  string `gorm:"column:bucket_store_id;not null;type:text;index"`
+	SharePointSite string `gorm:"column:share_point_site;not null;type:text"`
+
+	FilterDocumentLibraries string     `gorm:"column:filter_document_libraries;type:text"`
+	FilterMinFileSize       *int64     `gorm:"column:filter_min_file_size"`
+	FilterMaxFileSize       *int64     `gorm:"column:filter_max_file_size"`
+	FilterCreatedAfter      *time.Time `gorm:"column:filter_created_after;type:datetime"`
+	FilterUpdatedAfter      *time.Time `gorm:"column:filter_updated_after;type:datetime"`
+	FilterCreatedBefore     *time.Time `gorm:"column:filter_created_before;type:datetime"`
+	FilterUpdatedBefore     *time.Time `gorm:"column:filter_updated_before;type:datetime"`
+
+	CreatedAt time.Time `gorm:"not null"`
+	UpdatedAt time.Time `gorm:"not null"`
 }

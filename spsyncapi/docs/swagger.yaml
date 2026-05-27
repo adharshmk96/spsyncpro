@@ -9,6 +9,66 @@ definitions:
       id:
         type: string
     type: object
+  backupjob.BackupJobDetails:
+    properties:
+      active:
+        type: boolean
+      created_at:
+        type: string
+      end_at:
+        type: string
+      id:
+        type: string
+      job_config:
+        $ref: '#/definitions/backupjob.JobConfigDetails'
+      last_run:
+        type: string
+      next_run:
+        type: string
+      schedule:
+        $ref: '#/definitions/backupjob.ScheduleDetails'
+      start_at:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  backupjob.FilterDetails:
+    properties:
+      created_after:
+        type: string
+      created_before:
+        type: string
+      document_libraries:
+        type: string
+      max_file_size:
+        type: integer
+      min_file_size:
+        type: integer
+      updated_after:
+        type: string
+      updated_before:
+        type: string
+    type: object
+  backupjob.JobConfigDetails:
+    properties:
+      bucket_store:
+        type: string
+      filters:
+        $ref: '#/definitions/backupjob.FilterDetails'
+      organization:
+        type: string
+      share_point_site:
+        type: string
+    type: object
+  backupjob.ScheduleDetails:
+    properties:
+      cron:
+        type: string
+      interval:
+        type: integer
+      one_time:
+        type: string
+    type: object
   bucketstore.BucketStoreDetails:
     properties:
       bucket_name:
@@ -20,6 +80,61 @@ definitions:
       id:
         type: string
       updated_at:
+        type: string
+    type: object
+  handlers.backupJobConfigRequest:
+    properties:
+      bucket_store:
+        type: string
+      filters:
+        $ref: '#/definitions/handlers.backupJobFiltersRequest'
+      organization:
+        type: string
+      share_point_site:
+        type: string
+    required:
+    - bucket_store
+    - organization
+    - share_point_site
+    type: object
+  handlers.backupJobFiltersRequest:
+    properties:
+      created_after:
+        type: string
+      created_before:
+        type: string
+      document_libraries:
+        items:
+          type: string
+        type: array
+      max_file_size:
+        type: integer
+      min_file_size:
+        type: integer
+      updated_after:
+        type: string
+      updated_before:
+        type: string
+    type: object
+  handlers.backupJobListResponse:
+    properties:
+      backup_jobs:
+        items:
+          $ref: '#/definitions/backupjob.BackupJobDetails'
+        type: array
+    type: object
+  handlers.backupJobResponse:
+    properties:
+      backup_job:
+        $ref: '#/definitions/backupjob.BackupJobDetails'
+    type: object
+  handlers.backupJobScheduleRequest:
+    properties:
+      cron:
+        type: string
+      interval:
+        type: integer
+      one_time:
         type: string
     type: object
   handlers.bucketStoreListResponse:
@@ -43,6 +158,26 @@ definitions:
     required:
     - current_password
     - new_password
+    type: object
+  handlers.createBackupJobRequest:
+    properties:
+      active:
+        type: boolean
+      end_at:
+        type: string
+      job_config:
+        $ref: '#/definitions/handlers.backupJobConfigRequest'
+      last_run:
+        type: string
+      next_run:
+        type: string
+      schedule:
+        $ref: '#/definitions/handlers.backupJobScheduleRequest'
+      start_at:
+        type: string
+    required:
+    - job_config
+    - schedule
     type: object
   handlers.createBucketStoreRequest:
     properties:
@@ -153,6 +288,26 @@ definitions:
       token:
         type: string
     type: object
+  handlers.updateBackupJobRequest:
+    properties:
+      active:
+        type: boolean
+      end_at:
+        type: string
+      job_config:
+        $ref: '#/definitions/handlers.backupJobConfigRequest'
+      last_run:
+        type: string
+      next_run:
+        type: string
+      schedule:
+        $ref: '#/definitions/handlers.backupJobScheduleRequest'
+      start_at:
+        type: string
+    required:
+    - job_config
+    - schedule
+    type: object
   handlers.updateBucketStoreRequest:
     properties:
       bucket_name:
@@ -204,6 +359,173 @@ info:
   title: SPSync API
   version: "1.0"
 paths:
+  /backup-jobs:
+    get:
+      description: Returns all active backup jobs
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.backupJobListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: List backup jobs
+      tags:
+      - backup-jobs
+    post:
+      consumes:
+      - application/json
+      description: Creates a backup job with schedule and job configuration
+      parameters:
+      - description: Backup job payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.createBackupJobRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.backupJobResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create backup job
+      tags:
+      - backup-jobs
+  /backup-jobs/{id}:
+    delete:
+      description: Marks a backup job inactive; the record is retained
+      parameters:
+      - description: Backup job ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.successResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete backup job
+      tags:
+      - backup-jobs
+    get:
+      description: Returns an active backup job by ID
+      parameters:
+      - description: Backup job ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.backupJobResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get backup job
+      tags:
+      - backup-jobs
+    put:
+      consumes:
+      - application/json
+      description: Updates a backup job and replaces schedule + job config
+      parameters:
+      - description: Backup job ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Backup job payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.updateBackupJobRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.backupJobResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update backup job
+      tags:
+      - backup-jobs
   /bucket-stores:
     get:
       description: Returns all active bucket stores (config is never included)

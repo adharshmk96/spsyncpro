@@ -1,0 +1,394 @@
+package backupjob
+
+import (
+	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
+	"time"
+
+	"spsyncapi/internal/storage"
+
+	"github.com/google/uuid"
+)
+
+var (
+	ErrBackupJobNotFound      = errors.New("backup job not found")
+	ErrInvalidSchedule        = errors.New("schedule must set exactly one of interval, cron, or one_time")
+	ErrInvalidInterval        = errors.New("schedule.interval must be greater than 0")
+	ErrInvalidCron            = errors.New("schedule.cron must be a valid cron expression")
+	ErrInvalidOneTime         = errors.New("schedule.one_time must be in the future")
+	ErrInvalidStartAt         = errors.New("start_at must be before end_at")
+	ErrInvalidOrganizationID  = errors.New("job_config.organization is required")
+	ErrInvalidBucketStoreID   = errors.New("job_config.bucket_store is required")
+	ErrInvalidSharePointSite  = errors.New("job_config.share_point_site is required")
+	ErrInvalidMinFileSize     = errors.New("filters.min_file_size must be >= 0")
+	ErrInvalidMaxFileSize     = errors.New("filters.max_file_size must be >= 0")
+	ErrInvalidFileSizeRange   = errors.New("filters.max_file_size must be >= filters.min_file_size")
+	ErrInvalidCreatedRange    = errors.New("filters.created_before must be after created_after")
+	ErrInvalidUpdatedRange    = errors.New("filters.updated_before must be after updated_after")
+	ErrInvalidDocumentLibrary = errors.New("filters.document_libraries contains empty value")
+)
+
+type ScheduleInput struct {
+	IntervalSeconds *int64
+	Cron            *string
+	OneTime         *time.Time
+}
+
+type FilterInput struct {
+	DocumentLibrariesCSV string
+	MinFileSize          *int64
+	MaxFileSize          *int64
+	CreatedAfter         *time.Time
+	UpdatedAfter         *time.Time
+	CreatedBefore        *time.Time
+	UpdatedBefore        *time.Time
+}
+
+type JobConfigInput struct {
+	OrganizationID string
+	BucketStoreID  string
+	SharePointSite string
+	Filters        FilterInput
+}
+
+type CreateInput struct {
+	LastRun   *time.Time
+	NextRun   *time.Time
+	StartAt   *time.Time
+	EndAt     *time.Time
+	Active    bool
+	Schedule  ScheduleInput
+	JobConfig JobConfigInput
+}
+
+type UpdateInput struct {
+	ID string
+
+	LastRun   *time.Time
+	NextRun   *time.Time
+	StartAt   *time.Time
+	EndAt     *time.Time
+	Active    bool
+	Schedule  ScheduleInput
+	JobConfig JobConfigInput
+}
+
+type ScheduleDetails struct {
+	IntervalSeconds *int64     `json:"interval,omitempty"`
+	Cron            *string    `json:"cron,omitempty"`
+	OneTime         *time.Time `json:"one_time,omitempty"`
+}
+
+type FilterDetails struct {
+	DocumentLibrariesCSV string     `json:"document_libraries"`
+	MinFileSize          *int64     `json:"min_file_size,omitempty"`
+	MaxFileSize          *int64     `json:"max_file_size,omitempty"`
+	CreatedAfter         *time.Time `json:"created_after,omitempty"`
+	UpdatedAfter         *time.Time `json:"updated_after,omitempty"`
+	CreatedBefore        *time.Time `json:"created_before,omitempty"`
+	UpdatedBefore        *time.Time `json:"updated_before,omitempty"`
+}
+
+type JobConfigDetails struct {
+	OrganizationID string        `json:"organization"`
+	BucketStoreID  string        `json:"bucket_store"`
+	SharePointSite string        `json:"share_point_site"`
+	Filters        FilterDetails `json:"filters"`
+}
+
+type BackupJobDetails struct {
+	ID        string           `json:"id"`
+	LastRun   *time.Time       `json:"last_run,omitempty"`
+	NextRun   *time.Time       `json:"next_run,omitempty"`
+	StartAt   *time.Time       `json:"start_at,omitempty"`
+	EndAt     *time.Time       `json:"end_at,omitempty"`
+	Active    bool             `json:"active"`
+	Schedule  ScheduleDetails  `json:"schedule"`
+	JobConfig JobConfigDetails `json:"job_config"`
+	CreatedAt time.Time        `json:"created_at"`
+	UpdatedAt time.Time        `json:"updated_at"`
+}
+
+type Service struct {
+	repo   *storage.BackupJobRepository
+	logger *slog.Logger
+}
+
+type ServiceConfig struct {
+	Repo   *storage.BackupJobRepository
+	Logger *slog.Logger
+}
+
+func NewService(cfg ServiceConfig) (*Service, error) {
+	if cfg.Repo == nil {
+		return nil, errors.New("backup job repo is required")
+	}
+	if cfg.Logger == nil {
+		return nil, errors.New("logger is required")
+	}
+	return &Service{repo: cfg.Repo, logger: cfg.Logger}, nil
+}
+
+func (s *Service) Create(in CreateInput) (*BackupJobDetails, error) {
+	normalized, err := normalizeAndValidateInput(in)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	job := &storage.BackupJob{
+		ID:                      uuid.NewString(),
+		LastRun:                 normalized.LastRun,
+		NextRun:                 normalized.NextRun,
+		StartAt:                 normalized.StartAt,
+		EndAt:                   normalized.EndAt,
+		ScheduleIntervalSeconds: normalized.Schedule.IntervalSeconds,
+		ScheduleCron:            normalized.Schedule.Cron,
+		ScheduleOneTime:         normalized.Schedule.OneTime,
+		Active:                  normalized.Active,
+		OrganizationID:          normalized.JobConfig.OrganizationID,
+		BucketStoreID:           normalized.JobConfig.BucketStoreID,
+		SharePointSite:          normalized.JobConfig.SharePointSite,
+		FilterDocumentLibraries: normalized.JobConfig.Filters.DocumentLibrariesCSV,
+		FilterMinFileSize:       normalized.JobConfig.Filters.MinFileSize,
+		FilterMaxFileSize:       normalized.JobConfig.Filters.MaxFileSize,
+		FilterCreatedAfter:      normalized.JobConfig.Filters.CreatedAfter,
+		FilterUpdatedAfter:      normalized.JobConfig.Filters.UpdatedAfter,
+		FilterCreatedBefore:     normalized.JobConfig.Filters.CreatedBefore,
+		FilterUpdatedBefore:     normalized.JobConfig.Filters.UpdatedBefore,
+		CreatedAt:               now,
+		UpdatedAt:               now,
+	}
+
+	if err := s.repo.Create(job); err != nil {
+		return nil, fmt.Errorf("create backup job: %w", err)
+	}
+	return toDetails(job), nil
+}
+
+func (s *Service) Get(id string) (*BackupJobDetails, error) {
+	job, err := s.repo.FindActiveByID(strings.TrimSpace(id))
+	if err != nil {
+		if errors.Is(err, storage.ErrBackupJobNotFound) {
+			return nil, ErrBackupJobNotFound
+		}
+		return nil, fmt.Errorf("get backup job: %w", err)
+	}
+	return toDetails(job), nil
+}
+
+func (s *Service) List() ([]BackupJobDetails, error) {
+	jobs, err := s.repo.ListActive()
+	if err != nil {
+		return nil, fmt.Errorf("list backup jobs: %w", err)
+	}
+	out := make([]BackupJobDetails, 0, len(jobs))
+	for i := range jobs {
+		out = append(out, *toDetails(&jobs[i]))
+	}
+	return out, nil
+}
+
+func (s *Service) Update(in UpdateInput) (*BackupJobDetails, error) {
+	if strings.TrimSpace(in.ID) == "" {
+		return nil, ErrBackupJobNotFound
+	}
+	normalized, err := normalizeAndValidateInput(CreateInput{
+		LastRun:   in.LastRun,
+		NextRun:   in.NextRun,
+		StartAt:   in.StartAt,
+		EndAt:     in.EndAt,
+		Active:    in.Active,
+		Schedule:  in.Schedule,
+		JobConfig: in.JobConfig,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	job, err := s.repo.FindActiveByID(strings.TrimSpace(in.ID))
+	if err != nil {
+		if errors.Is(err, storage.ErrBackupJobNotFound) {
+			return nil, ErrBackupJobNotFound
+		}
+		return nil, fmt.Errorf("find backup job: %w", err)
+	}
+
+	job.LastRun = normalized.LastRun
+	job.NextRun = normalized.NextRun
+	job.StartAt = normalized.StartAt
+	job.EndAt = normalized.EndAt
+	job.Active = normalized.Active
+	job.ScheduleIntervalSeconds = normalized.Schedule.IntervalSeconds
+	job.ScheduleCron = normalized.Schedule.Cron
+	job.ScheduleOneTime = normalized.Schedule.OneTime
+	job.OrganizationID = normalized.JobConfig.OrganizationID
+	job.BucketStoreID = normalized.JobConfig.BucketStoreID
+	job.SharePointSite = normalized.JobConfig.SharePointSite
+	job.FilterDocumentLibraries = normalized.JobConfig.Filters.DocumentLibrariesCSV
+	job.FilterMinFileSize = normalized.JobConfig.Filters.MinFileSize
+	job.FilterMaxFileSize = normalized.JobConfig.Filters.MaxFileSize
+	job.FilterCreatedAfter = normalized.JobConfig.Filters.CreatedAfter
+	job.FilterUpdatedAfter = normalized.JobConfig.Filters.UpdatedAfter
+	job.FilterCreatedBefore = normalized.JobConfig.Filters.CreatedBefore
+	job.FilterUpdatedBefore = normalized.JobConfig.Filters.UpdatedBefore
+	job.UpdatedAt = time.Now().UTC()
+
+	if err := s.repo.Update(job); err != nil {
+		if errors.Is(err, storage.ErrBackupJobNotFound) {
+			return nil, ErrBackupJobNotFound
+		}
+		return nil, fmt.Errorf("update backup job: %w", err)
+	}
+	return toDetails(job), nil
+}
+
+func (s *Service) Delete(id string) error {
+	if err := s.repo.MarkInactive(strings.TrimSpace(id)); err != nil {
+		if errors.Is(err, storage.ErrBackupJobNotFound) {
+			return ErrBackupJobNotFound
+		}
+		return fmt.Errorf("delete backup job: %w", err)
+	}
+	return nil
+}
+
+func normalizeAndValidateInput(in CreateInput) (CreateInput, error) {
+	in.JobConfig.OrganizationID = strings.TrimSpace(in.JobConfig.OrganizationID)
+	in.JobConfig.BucketStoreID = strings.TrimSpace(in.JobConfig.BucketStoreID)
+	in.JobConfig.SharePointSite = strings.TrimSpace(in.JobConfig.SharePointSite)
+	in.JobConfig.Filters.DocumentLibrariesCSV = normalizeCSV(in.JobConfig.Filters.DocumentLibrariesCSV)
+	if err := validateInput(in); err != nil {
+		return CreateInput{}, err
+	}
+	return in, nil
+}
+
+func validateInput(in CreateInput) error {
+	if in.StartAt != nil && in.EndAt != nil && in.StartAt.After(*in.EndAt) {
+		return ErrInvalidStartAt
+	}
+	if strings.TrimSpace(in.JobConfig.OrganizationID) == "" {
+		return ErrInvalidOrganizationID
+	}
+	if strings.TrimSpace(in.JobConfig.BucketStoreID) == "" {
+		return ErrInvalidBucketStoreID
+	}
+	if strings.TrimSpace(in.JobConfig.SharePointSite) == "" {
+		return ErrInvalidSharePointSite
+	}
+
+	if err := validateSchedule(in.Schedule); err != nil {
+		return err
+	}
+	return validateFilters(in.JobConfig.Filters)
+}
+
+func validateSchedule(s ScheduleInput) error {
+	setCount := 0
+	if s.IntervalSeconds != nil {
+		setCount++
+	}
+	if s.Cron != nil && strings.TrimSpace(*s.Cron) != "" {
+		setCount++
+	}
+	if s.OneTime != nil {
+		setCount++
+	}
+	if setCount != 1 {
+		return ErrInvalidSchedule
+	}
+	if s.IntervalSeconds != nil && *s.IntervalSeconds <= 0 {
+		return ErrInvalidInterval
+	}
+	if s.Cron != nil {
+		cron := strings.TrimSpace(*s.Cron)
+		if cron == "" {
+			return ErrInvalidCron
+		}
+		parts := strings.Fields(cron)
+		if len(parts) < 5 || len(parts) > 6 {
+			return ErrInvalidCron
+		}
+	}
+	if s.OneTime != nil && !s.OneTime.After(time.Now().UTC()) {
+		return ErrInvalidOneTime
+	}
+	return nil
+}
+
+func validateFilters(f FilterInput) error {
+	if strings.Contains(f.DocumentLibrariesCSV, ",,") {
+		return ErrInvalidDocumentLibrary
+	}
+	parts := strings.Split(f.DocumentLibrariesCSV, ",")
+	for _, part := range parts {
+		if strings.TrimSpace(part) == "" && strings.TrimSpace(f.DocumentLibrariesCSV) != "" {
+			return ErrInvalidDocumentLibrary
+		}
+	}
+
+	if f.MinFileSize != nil && *f.MinFileSize < 0 {
+		return ErrInvalidMinFileSize
+	}
+	if f.MaxFileSize != nil && *f.MaxFileSize < 0 {
+		return ErrInvalidMaxFileSize
+	}
+	if f.MinFileSize != nil && f.MaxFileSize != nil && *f.MaxFileSize < *f.MinFileSize {
+		return ErrInvalidFileSizeRange
+	}
+	if f.CreatedAfter != nil && f.CreatedBefore != nil && !f.CreatedBefore.After(*f.CreatedAfter) {
+		return ErrInvalidCreatedRange
+	}
+	if f.UpdatedAfter != nil && f.UpdatedBefore != nil && !f.UpdatedBefore.After(*f.UpdatedAfter) {
+		return ErrInvalidUpdatedRange
+	}
+	return nil
+}
+
+func normalizeCSV(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	parts := strings.Split(trimmed, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		out = append(out, strings.TrimSpace(part))
+	}
+	return strings.Join(out, ",")
+}
+
+func toDetails(job *storage.BackupJob) *BackupJobDetails {
+	return &BackupJobDetails{
+		ID:      job.ID,
+		LastRun: job.LastRun,
+		NextRun: job.NextRun,
+		StartAt: job.StartAt,
+		EndAt:   job.EndAt,
+		Active:  job.Active,
+		Schedule: ScheduleDetails{
+			IntervalSeconds: job.ScheduleIntervalSeconds,
+			Cron:            job.ScheduleCron,
+			OneTime:         job.ScheduleOneTime,
+		},
+		JobConfig: JobConfigDetails{
+			OrganizationID: job.OrganizationID,
+			BucketStoreID:  job.BucketStoreID,
+			SharePointSite: job.SharePointSite,
+			Filters: FilterDetails{
+				DocumentLibrariesCSV: job.FilterDocumentLibraries,
+				MinFileSize:          job.FilterMinFileSize,
+				MaxFileSize:          job.FilterMaxFileSize,
+				CreatedAfter:         job.FilterCreatedAfter,
+				UpdatedAfter:         job.FilterUpdatedAfter,
+				CreatedBefore:        job.FilterCreatedBefore,
+				UpdatedBefore:        job.FilterUpdatedBefore,
+			},
+		},
+		CreatedAt: job.CreatedAt,
+		UpdatedAt: job.UpdatedAt,
+	}
+}

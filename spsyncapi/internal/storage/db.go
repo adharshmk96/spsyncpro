@@ -36,6 +36,7 @@ func Open(sqlitePath string) (*gorm.DB, error) {
 		&PasswordResetToken{},
 		&Organization{},
 		&BucketStore{},
+		&BackupJob{},
 	); err != nil {
 		return nil, fmt.Errorf("storage: auto migrate: %w", err)
 	}
