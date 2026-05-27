@@ -1,0 +1,9 @@
+{
+  "name": "spsyncapi-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "test:watch": "bun test --watch"
+  }
+}
