@@ -28,6 +28,7 @@ var (
 	ErrInvalidCreatedRange    = errors.New("filters.created_before must be after created_after")
 	ErrInvalidUpdatedRange    = errors.New("filters.updated_before must be after updated_after")
 	ErrInvalidDocumentLibrary = errors.New("filters.document_libraries contains empty value")
+	ErrInvalidMemberID        = errors.New("member id is required")
 )
 
 type ScheduleInput struct {
@@ -54,6 +55,7 @@ type JobConfigInput struct {
 }
 
 type CreateInput struct {
+	MemberID  string
 	LastRun   *time.Time
 	NextRun   *time.Time
 	StartAt   *time.Time
@@ -112,34 +114,56 @@ type BackupJobDetails struct {
 }
 
 type Service struct {
-	repo   *storage.BackupJobRepository
-	logger *slog.Logger
+	repo        *storage.BackupJobRepository
+	orgRepo     *storage.OrganizationRepository
+	bucketRepo  *storage.BucketStoreRepository
+	logger      *slog.Logger
 }
 
 type ServiceConfig struct {
-	Repo   *storage.BackupJobRepository
-	Logger *slog.Logger
+	Repo       *storage.BackupJobRepository
+	OrgRepo    *storage.OrganizationRepository
+	BucketRepo *storage.BucketStoreRepository
+	Logger     *slog.Logger
 }
 
 func NewService(cfg ServiceConfig) (*Service, error) {
 	if cfg.Repo == nil {
 		return nil, errors.New("backup job repo is required")
 	}
+	if cfg.OrgRepo == nil {
+		return nil, errors.New("organization repo is required")
+	}
+	if cfg.BucketRepo == nil {
+		return nil, errors.New("bucket store repo is required")
+	}
 	if cfg.Logger == nil {
 		return nil, errors.New("logger is required")
 	}
-	return &Service{repo: cfg.Repo, logger: cfg.Logger}, nil
+	return &Service{
+		repo:       cfg.Repo,
+		orgRepo:    cfg.OrgRepo,
+		bucketRepo: cfg.BucketRepo,
+		logger:     cfg.Logger,
+	}, nil
 }
 
 func (s *Service) Create(in CreateInput) (*BackupJobDetails, error) {
+	if strings.TrimSpace(in.MemberID) == "" {
+		return nil, ErrInvalidMemberID
+	}
 	normalized, err := normalizeAndValidateInput(in)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.validateJobReferences(in.MemberID, normalized.JobConfig); err != nil {
 		return nil, err
 	}
 
 	now := time.Now().UTC()
 	job := &storage.BackupJob{
 		ID:                      uuid.NewString(),
+		MemberID:                in.MemberID,
 		LastRun:                 normalized.LastRun,
 		NextRun:                 normalized.NextRun,
 		StartAt:                 normalized.StartAt,
@@ -168,8 +192,11 @@ func (s *Service) Create(in CreateInput) (*BackupJobDetails, error) {
 	return toDetails(job), nil
 }
 
-func (s *Service) Get(id string) (*BackupJobDetails, error) {
-	job, err := s.repo.FindActiveByID(strings.TrimSpace(id))
+func (s *Service) Get(memberID, id string) (*BackupJobDetails, error) {
+	if strings.TrimSpace(memberID) == "" {
+		return nil, ErrInvalidMemberID
+	}
+	job, err := s.repo.FindActiveByID(strings.TrimSpace(id), memberID)
 	if err != nil {
 		if errors.Is(err, storage.ErrBackupJobNotFound) {
 			return nil, ErrBackupJobNotFound
@@ -179,8 +206,11 @@ func (s *Service) Get(id string) (*BackupJobDetails, error) {
 	return toDetails(job), nil
 }
 
-func (s *Service) List() ([]BackupJobDetails, error) {
-	jobs, err := s.repo.ListActive()
+func (s *Service) List(memberID string) ([]BackupJobDetails, error) {
+	if strings.TrimSpace(memberID) == "" {
+		return nil, ErrInvalidMemberID
+	}
+	jobs, err := s.repo.ListActive(memberID)
 	if err != nil {
 		return nil, fmt.Errorf("list backup jobs: %w", err)
 	}
@@ -191,11 +221,15 @@ func (s *Service) List() ([]BackupJobDetails, error) {
 	return out, nil
 }
 
-func (s *Service) Update(in UpdateInput) (*BackupJobDetails, error) {
+func (s *Service) Update(memberID string, in UpdateInput) (*BackupJobDetails, error) {
+	if strings.TrimSpace(memberID) == "" {
+		return nil, ErrInvalidMemberID
+	}
 	if strings.TrimSpace(in.ID) == "" {
 		return nil, ErrBackupJobNotFound
 	}
 	normalized, err := normalizeAndValidateInput(CreateInput{
+		MemberID:  memberID,
 		LastRun:   in.LastRun,
 		NextRun:   in.NextRun,
 		StartAt:   in.StartAt,
@@ -207,8 +241,11 @@ func (s *Service) Update(in UpdateInput) (*BackupJobDetails, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := s.validateJobReferences(memberID, normalized.JobConfig); err != nil {
+		return nil, err
+	}
 
-	job, err := s.repo.FindActiveByID(strings.TrimSpace(in.ID))
+	job, err := s.repo.FindActiveByID(strings.TrimSpace(in.ID), memberID)
 	if err != nil {
 		if errors.Is(err, storage.ErrBackupJobNotFound) {
 			return nil, ErrBackupJobNotFound
@@ -245,12 +282,31 @@ func (s *Service) Update(in UpdateInput) (*BackupJobDetails, error) {
 	return toDetails(job), nil
 }
 
-func (s *Service) Delete(id string) error {
-	if err := s.repo.MarkInactive(strings.TrimSpace(id)); err != nil {
+func (s *Service) Delete(memberID, id string) error {
+	if strings.TrimSpace(memberID) == "" {
+		return ErrInvalidMemberID
+	}
+	if err := s.repo.MarkInactive(strings.TrimSpace(id), memberID); err != nil {
 		if errors.Is(err, storage.ErrBackupJobNotFound) {
 			return ErrBackupJobNotFound
 		}
 		return fmt.Errorf("delete backup job: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) validateJobReferences(memberID string, cfg JobConfigInput) error {
+	if _, err := s.orgRepo.FindActiveByID(cfg.OrganizationID, memberID); err != nil {
+		if errors.Is(err, storage.ErrOrganizationNotFound) {
+			return ErrInvalidOrganizationID
+		}
+		return fmt.Errorf("validate organization reference: %w", err)
+	}
+	if _, err := s.bucketRepo.FindActiveByID(cfg.BucketStoreID, memberID); err != nil {
+		if errors.Is(err, storage.ErrBucketStoreNotFound) {
+			return ErrInvalidBucketStoreID
+		}
+		return fmt.Errorf("validate bucket store reference: %w", err)
 	}
 	return nil
 }

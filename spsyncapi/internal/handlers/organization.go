@@ -59,12 +59,18 @@ type organizationListResponse struct {
 // @Failure      500   {object}  errorResponse
 // @Router       /organizations [post]
 func (h *OrganizationHandler) Create(c *gin.Context) {
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
 	var req createOrganizationRequest
 	if !bindJSON(c, &req) {
 		return
 	}
 
 	details, err := h.svc.Create(organization.CreateInput{
+		MemberID:     memberID,
 		Name:         req.Name,
 		TenantID:     req.TenantID,
 		ClientID:     req.ClientID,
@@ -90,7 +96,12 @@ func (h *OrganizationHandler) Create(c *gin.Context) {
 // @Failure      500  {object}  errorResponse
 // @Router       /organizations [get]
 func (h *OrganizationHandler) List(c *gin.Context) {
-	orgs, err := h.svc.List()
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
+	orgs, err := h.svc.List(memberID)
 	if err != nil {
 		h.handleOrgError(c, err)
 		return
@@ -115,8 +126,13 @@ func (h *OrganizationHandler) List(c *gin.Context) {
 // @Failure      500  {object}  errorResponse
 // @Router       /organizations/{id} [get]
 func (h *OrganizationHandler) Get(c *gin.Context) {
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
 	id := c.Param("id")
-	details, err := h.svc.Get(id)
+	details, err := h.svc.Get(memberID, id)
 	if err != nil {
 		h.handleOrgError(c, err)
 		return
@@ -142,12 +158,17 @@ func (h *OrganizationHandler) Get(c *gin.Context) {
 // @Failure      500   {object}  errorResponse
 // @Router       /organizations/{id} [put]
 func (h *OrganizationHandler) Update(c *gin.Context) {
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
 	var req updateOrganizationRequest
 	if !bindJSON(c, &req) {
 		return
 	}
 
-	details, err := h.svc.Update(organization.UpdateInput{
+	details, err := h.svc.Update(memberID, organization.UpdateInput{
 		ID:           c.Param("id"),
 		Name:         req.Name,
 		TenantID:     req.TenantID,
@@ -176,7 +197,12 @@ func (h *OrganizationHandler) Update(c *gin.Context) {
 // @Failure      500  {object}  errorResponse
 // @Router       /organizations/{id} [delete]
 func (h *OrganizationHandler) Delete(c *gin.Context) {
-	if err := h.svc.Delete(c.Param("id")); err != nil {
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
+	if err := h.svc.Delete(memberID, c.Param("id")); err != nil {
 		h.handleOrgError(c, err)
 		return
 	}

@@ -92,4 +92,32 @@ describe("organizations endpoints", () => {
     const getAfterDelete = await apiRequest("GET", `/organizations/${organizationId}`, { token });
     expect(getAfterDelete.status).toBe(404);
   });
+
+  test("GET /organizations/:id returns 404 for another member's organization", async () => {
+    const userA = await registerAndLogin();
+    const create = await apiRequest("POST", "/organizations", {
+      token: userA.token,
+      body: makeOrganizationPayload(),
+    });
+    expect(create.status).toBe(201);
+
+    const userB = await registerAndLogin();
+    const response = await apiRequest("GET", `/organizations/${create.body.organization.id}`, {
+      token: userB.token,
+    });
+    expect(response.status).toBe(404);
+  });
+
+  test("GET /organizations excludes another member's organizations", async () => {
+    const userA = await registerAndLogin();
+    await apiRequest("POST", "/organizations", {
+      token: userA.token,
+      body: makeOrganizationPayload(),
+    });
+
+    const userB = await registerAndLogin();
+    const response = await apiRequest("GET", "/organizations", { token: userB.token });
+    expect(response.status).toBe(200);
+    expect(response.body.organizations).toHaveLength(0);
+  });
 });

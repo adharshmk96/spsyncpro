@@ -18,6 +18,7 @@ var (
 	ErrInvalidTenantID     = errors.New("tenant_id is required")
 	ErrInvalidClientID     = errors.New("client_id is required")
 	ErrInvalidTenantSecret = errors.New("tenant_secret is required")
+	ErrInvalidMemberID     = errors.New("member id is required")
 	ErrOrganizationNotFound = errors.New("organization not found")
 	ErrTenantIDTaken       = errors.New("tenant id already registered")
 )
@@ -34,6 +35,7 @@ type OrganizationDetails struct {
 
 // CreateInput holds fields for creating an organization.
 type CreateInput struct {
+	MemberID     string
 	Name         string
 	TenantID     string
 	ClientID     string
@@ -83,6 +85,9 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 
 // Create registers a new organization with an encrypted tenant secret.
 func (s *Service) Create(in CreateInput) (*OrganizationDetails, error) {
+	if strings.TrimSpace(in.MemberID) == "" {
+		return nil, ErrInvalidMemberID
+	}
 	if err := validateCreate(in); err != nil {
 		return nil, err
 	}
@@ -95,6 +100,7 @@ func (s *Service) Create(in CreateInput) (*OrganizationDetails, error) {
 	now := time.Now().UTC()
 	org := &storage.Organization{
 		ID:                    uuid.NewString(),
+		MemberID:              in.MemberID,
 		Name:                  in.Name,
 		TenantID:              in.TenantID,
 		ClientID:              in.ClientID,
@@ -114,9 +120,12 @@ func (s *Service) Create(in CreateInput) (*OrganizationDetails, error) {
 	return toDetails(org), nil
 }
 
-// Get returns an active organization by ID.
-func (s *Service) Get(id string) (*OrganizationDetails, error) {
-	org, err := s.repo.FindActiveByID(id)
+// Get returns an active organization by ID for the given member.
+func (s *Service) Get(memberID, id string) (*OrganizationDetails, error) {
+	if strings.TrimSpace(memberID) == "" {
+		return nil, ErrInvalidMemberID
+	}
+	org, err := s.repo.FindActiveByID(id, memberID)
 	if err != nil {
 		if errors.Is(err, storage.ErrOrganizationNotFound) {
 			return nil, ErrOrganizationNotFound
@@ -126,9 +135,12 @@ func (s *Service) Get(id string) (*OrganizationDetails, error) {
 	return toDetails(org), nil
 }
 
-// List returns all active organizations.
-func (s *Service) List() ([]OrganizationDetails, error) {
-	orgs, err := s.repo.ListActive()
+// List returns all active organizations for the given member.
+func (s *Service) List(memberID string) ([]OrganizationDetails, error) {
+	if strings.TrimSpace(memberID) == "" {
+		return nil, ErrInvalidMemberID
+	}
+	orgs, err := s.repo.ListActive(memberID)
 	if err != nil {
 		return nil, fmt.Errorf("list organizations: %w", err)
 	}
@@ -141,7 +153,10 @@ func (s *Service) List() ([]OrganizationDetails, error) {
 }
 
 // Update modifies an active organization. Tenant secret is re-encrypted when provided.
-func (s *Service) Update(in UpdateInput) (*OrganizationDetails, error) {
+func (s *Service) Update(memberID string, in UpdateInput) (*OrganizationDetails, error) {
+	if strings.TrimSpace(memberID) == "" {
+		return nil, ErrInvalidMemberID
+	}
 	if strings.TrimSpace(in.ID) == "" {
 		return nil, ErrOrganizationNotFound
 	}
@@ -149,7 +164,7 @@ func (s *Service) Update(in UpdateInput) (*OrganizationDetails, error) {
 		return nil, err
 	}
 
-	org, err := s.repo.FindActiveByID(in.ID)
+	org, err := s.repo.FindActiveByID(in.ID, memberID)
 	if err != nil {
 		if errors.Is(err, storage.ErrOrganizationNotFound) {
 			return nil, ErrOrganizationNotFound
@@ -158,7 +173,7 @@ func (s *Service) Update(in UpdateInput) (*OrganizationDetails, error) {
 	}
 
 	if tenantID := strings.TrimSpace(in.TenantID); tenantID != "" && tenantID != org.TenantID {
-		existing, findErr := s.repo.FindByTenantID(tenantID)
+		existing, findErr := s.repo.FindByTenantID(tenantID, memberID)
 		if findErr == nil && existing.ID != org.ID {
 			return nil, ErrTenantIDTaken
 		}
@@ -191,8 +206,11 @@ func (s *Service) Update(in UpdateInput) (*OrganizationDetails, error) {
 }
 
 // Delete marks an organization inactive (soft delete).
-func (s *Service) Delete(id string) error {
-	if err := s.repo.MarkInactive(id); err != nil {
+func (s *Service) Delete(memberID, id string) error {
+	if strings.TrimSpace(memberID) == "" {
+		return ErrInvalidMemberID
+	}
+	if err := s.repo.MarkInactive(id, memberID); err != nil {
 		if errors.Is(err, storage.ErrOrganizationNotFound) {
 			return ErrOrganizationNotFound
 		}

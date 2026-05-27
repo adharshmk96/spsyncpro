@@ -87,11 +87,18 @@ type backupJobListResponse struct {
 // @Failure      500   {object}  errorResponse
 // @Router       /backup-jobs [post]
 func (h *BackupJobHandler) Create(c *gin.Context) {
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
 	var req createBackupJobRequest
 	if !bindJSON(c, &req) {
 		return
 	}
-	details, err := h.svc.Create(toCreateInput(req))
+	in := toCreateInput(req)
+	in.MemberID = memberID
+	details, err := h.svc.Create(in)
 	if err != nil {
 		h.handleBackupJobError(c, err)
 		return
@@ -111,7 +118,12 @@ func (h *BackupJobHandler) Create(c *gin.Context) {
 // @Failure      500  {object}  errorResponse
 // @Router       /backup-jobs [get]
 func (h *BackupJobHandler) List(c *gin.Context) {
-	jobs, err := h.svc.List()
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
+	jobs, err := h.svc.List(memberID)
 	if err != nil {
 		h.handleBackupJobError(c, err)
 		return
@@ -136,7 +148,12 @@ func (h *BackupJobHandler) List(c *gin.Context) {
 // @Failure      500  {object}  errorResponse
 // @Router       /backup-jobs/{id} [get]
 func (h *BackupJobHandler) Get(c *gin.Context) {
-	details, err := h.svc.Get(c.Param("id"))
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
+	details, err := h.svc.Get(memberID, c.Param("id"))
 	if err != nil {
 		h.handleBackupJobError(c, err)
 		return
@@ -161,11 +178,16 @@ func (h *BackupJobHandler) Get(c *gin.Context) {
 // @Failure      500   {object}  errorResponse
 // @Router       /backup-jobs/{id} [put]
 func (h *BackupJobHandler) Update(c *gin.Context) {
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
 	var req updateBackupJobRequest
 	if !bindJSON(c, &req) {
 		return
 	}
-	details, err := h.svc.Update(toUpdateInput(c.Param("id"), req))
+	details, err := h.svc.Update(memberID, toUpdateInput(c.Param("id"), req))
 	if err != nil {
 		h.handleBackupJobError(c, err)
 		return
@@ -187,7 +209,12 @@ func (h *BackupJobHandler) Update(c *gin.Context) {
 // @Failure      500  {object}  errorResponse
 // @Router       /backup-jobs/{id} [delete]
 func (h *BackupJobHandler) Delete(c *gin.Context) {
-	if err := h.svc.Delete(c.Param("id")); err != nil {
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
+	if err := h.svc.Delete(memberID, c.Param("id")); err != nil {
 		h.handleBackupJobError(c, err)
 		return
 	}

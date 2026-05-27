@@ -23,9 +23,9 @@ const (
 // Flow:
 //  1. Extract "Authorization: Bearer <token>" header.
 //  2. Parse the JWT (allowing expired tokens through for step 3).
-//  3a. Valid + not expired → verify session active → set context and continue.
-//  3b. Valid signature but expired → verify session active → mint new JWT →
-//      attach as "X-Access-Token" response header → set context and continue.
+//     3a. Valid + not expired → verify session active → set context and continue.
+//     3b. Valid signature but expired → verify session active → mint new JWT →
+//     attach as "X-Access-Token" response header → set context and continue.
 //  4. Invalid JWT or inactive session → respond 401 and abort.
 func Authentication(svc *auth.Service, jwtCfg auth.JWTConfig, logger *slog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {

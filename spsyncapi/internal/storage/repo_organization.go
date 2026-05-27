@@ -40,10 +40,10 @@ func (r *OrganizationRepository) Create(o *Organization) error {
 	return nil
 }
 
-// FindActiveByID returns an active organization by primary key.
-func (r *OrganizationRepository) FindActiveByID(id string) (*Organization, error) {
+// FindActiveByID returns an active organization owned by memberID.
+func (r *OrganizationRepository) FindActiveByID(id, memberID string) (*Organization, error) {
 	var o Organization
-	err := r.db.Where("id = ? AND active = ?", id, true).First(&o).Error
+	err := r.db.Where("id = ? AND active = ? AND member_id = ?", id, true, memberID).First(&o).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrOrganizationNotFound
 	}
@@ -53,10 +53,10 @@ func (r *OrganizationRepository) FindActiveByID(id string) (*Organization, error
 	return &o, nil
 }
 
-// ListActive returns all active organizations ordered by name.
-func (r *OrganizationRepository) ListActive() ([]Organization, error) {
+// ListActive returns active organizations owned by memberID ordered by name.
+func (r *OrganizationRepository) ListActive(memberID string) ([]Organization, error) {
 	var orgs []Organization
-	err := r.db.Where("active = ?", true).Order("name ASC").Find(&orgs).Error
+	err := r.db.Where("active = ? AND member_id = ?", true, memberID).Order("name ASC").Find(&orgs).Error
 	if err != nil {
 		return nil, fmt.Errorf("organization repo: list: %w", err)
 	}
@@ -82,10 +82,10 @@ func (r *OrganizationRepository) Update(o *Organization) error {
 	return nil
 }
 
-// MarkInactive sets active=false for the organization (soft delete).
-func (r *OrganizationRepository) MarkInactive(id string) error {
+// MarkInactive sets active=false for the organization owned by memberID (soft delete).
+func (r *OrganizationRepository) MarkInactive(id, memberID string) error {
 	result := r.db.Model(&Organization{}).
-		Where("id = ? AND active = ?", id, true).
+		Where("id = ? AND active = ? AND member_id = ?", id, true, memberID).
 		Updates(map[string]interface{}{
 			"active":     false,
 			"updated_at": time.Now().UTC(),
@@ -99,10 +99,10 @@ func (r *OrganizationRepository) MarkInactive(id string) error {
 	return nil
 }
 
-// FindByTenantID returns an organization with the given tenant_id (any active state).
-func (r *OrganizationRepository) FindByTenantID(tenantID string) (*Organization, error) {
+// FindByTenantID returns an organization with the given tenant_id for memberID.
+func (r *OrganizationRepository) FindByTenantID(tenantID, memberID string) (*Organization, error) {
 	var o Organization
-	err := r.db.Where("tenant_id = ?", normaliseID(tenantID)).First(&o).Error
+	err := r.db.Where("tenant_id = ? AND member_id = ?", normaliseID(tenantID), memberID).First(&o).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrOrganizationNotFound
 	}

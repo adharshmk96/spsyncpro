@@ -294,6 +294,16 @@ func bindJSON(c *gin.Context, dst interface{}) bool {
 	return true
 }
 
+// requireMemberID returns the authenticated member ID or writes 401 and returns false.
+func requireMemberID(c *gin.Context) (string, bool) {
+	memberID := middleware.GetMemberID(c)
+	if memberID == "" {
+		respondError(c, http.StatusUnauthorized, "authentication required")
+		return "", false
+	}
+	return memberID, true
+}
+
 // respondError writes a consistent JSON error response.
 func respondError(c *gin.Context, status int, message string) {
 	c.JSON(status, gin.H{"error": message})

@@ -41,6 +41,10 @@ func Open(sqlitePath string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("storage: auto migrate: %w", err)
 	}
 
+	if err := migrateResourceOwnership(db); err != nil {
+		return nil, fmt.Errorf("storage: migrate resource ownership: %w", err)
+	}
+
 	return db, nil
 }
 

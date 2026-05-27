@@ -98,8 +98,10 @@ func New(cfg *config.Config, logger *slog.Logger, metrics *telemetry.HTTPMetrics
 	}
 
 	backupJobSvc, err := backupjob.NewService(backupjob.ServiceConfig{
-		Repo:   backupJobRepo,
-		Logger: logger,
+		Repo:       backupJobRepo,
+		OrgRepo:    orgRepo,
+		BucketRepo: bucketStoreRepo,
+		Logger:     logger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create backup job service: %w", err)

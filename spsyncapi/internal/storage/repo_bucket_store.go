@@ -39,10 +39,10 @@ func (r *BucketStoreRepository) Create(b *BucketStore) error {
 	return nil
 }
 
-// FindActiveByID returns an active bucket store by primary key.
-func (r *BucketStoreRepository) FindActiveByID(id string) (*BucketStore, error) {
+// FindActiveByID returns an active bucket store owned by memberID.
+func (r *BucketStoreRepository) FindActiveByID(id, memberID string) (*BucketStore, error) {
 	var b BucketStore
-	err := r.db.Where("id = ? AND active = ?", id, true).First(&b).Error
+	err := r.db.Where("id = ? AND active = ? AND member_id = ?", id, true, memberID).First(&b).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrBucketStoreNotFound
 	}
@@ -52,10 +52,10 @@ func (r *BucketStoreRepository) FindActiveByID(id string) (*BucketStore, error) 
 	return &b, nil
 }
 
-// ListActive returns all active bucket stores ordered by bucket name.
-func (r *BucketStoreRepository) ListActive() ([]BucketStore, error) {
+// ListActive returns active bucket stores owned by memberID ordered by bucket name.
+func (r *BucketStoreRepository) ListActive(memberID string) ([]BucketStore, error) {
 	var stores []BucketStore
-	err := r.db.Where("active = ?", true).Order("bucket_name ASC").Find(&stores).Error
+	err := r.db.Where("active = ? AND member_id = ?", true, memberID).Order("bucket_name ASC").Find(&stores).Error
 	if err != nil {
 		return nil, fmt.Errorf("bucket store repo: list: %w", err)
 	}
@@ -80,10 +80,10 @@ func (r *BucketStoreRepository) Update(b *BucketStore) error {
 	return nil
 }
 
-// MarkInactive sets active=false for the bucket store (soft delete).
-func (r *BucketStoreRepository) MarkInactive(id string) error {
+// MarkInactive sets active=false for the bucket store owned by memberID (soft delete).
+func (r *BucketStoreRepository) MarkInactive(id, memberID string) error {
 	result := r.db.Model(&BucketStore{}).
-		Where("id = ? AND active = ?", id, true).
+		Where("id = ? AND active = ? AND member_id = ?", id, true, memberID).
 		Updates(map[string]interface{}{
 			"active":     false,
 			"updated_at": time.Now().UTC(),
@@ -97,10 +97,10 @@ func (r *BucketStoreRepository) MarkInactive(id string) error {
 	return nil
 }
 
-// FindByBucketName returns a bucket store with the given bucket_name (any active state).
-func (r *BucketStoreRepository) FindByBucketName(name string) (*BucketStore, error) {
+// FindByBucketName returns a bucket store with the given bucket_name for memberID.
+func (r *BucketStoreRepository) FindByBucketName(name, memberID string) (*BucketStore, error) {
 	var b BucketStore
-	err := r.db.Where("bucket_name = ?", normaliseBucketName(name)).First(&b).Error
+	err := r.db.Where("bucket_name = ? AND member_id = ?", normaliseBucketName(name), memberID).First(&b).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrBucketStoreNotFound
 	}

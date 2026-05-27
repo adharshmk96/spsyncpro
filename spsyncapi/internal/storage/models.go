@@ -54,7 +54,8 @@ const (
 // ConfigEncrypted holds AES-GCM ciphertext of JSON config; plaintext is never persisted.
 type BucketStore struct {
 	ID              string    `gorm:"primaryKey;type:text"`
-	BucketName      string    `gorm:"column:bucket_name;not null;uniqueIndex;type:text"`
+	MemberID        string    `gorm:"column:member_id;not null;index;type:text;uniqueIndex:idx_bucket_member_name"`
+	BucketName      string    `gorm:"column:bucket_name;not null;type:text;uniqueIndex:idx_bucket_member_name"`
 	BucketType      string    `gorm:"column:bucket_type;not null;type:text"`
 	ConfigEncrypted string    `gorm:"column:config_encrypted;not null;type:text"`
 	Active          bool      `gorm:"not null;default:true;index"`
@@ -66,8 +67,9 @@ type BucketStore struct {
 // TenantSecretEncrypted holds AES-GCM ciphertext; the plaintext is never persisted.
 type Organization struct {
 	ID                    string    `gorm:"primaryKey;type:text"`
+	MemberID              string    `gorm:"column:member_id;not null;index;type:text;uniqueIndex:idx_org_member_tenant"`
 	Name                  string    `gorm:"not null;type:text"`
-	TenantID              string    `gorm:"column:tenant_id;not null;uniqueIndex;type:text"`
+	TenantID              string    `gorm:"column:tenant_id;not null;type:text;uniqueIndex:idx_org_member_tenant"`
 	ClientID              string    `gorm:"column:client_id;not null;type:text"`
 	TenantSecretEncrypted string    `gorm:"column:tenant_secret_encrypted;not null;type:text"`
 	Active                bool      `gorm:"not null;default:true;index"`
@@ -77,7 +79,8 @@ type Organization struct {
 
 // BackupJob defines a scheduled backup configuration and execution window metadata.
 type BackupJob struct {
-	ID string `gorm:"primaryKey;type:text"`
+	ID       string `gorm:"primaryKey;type:text"`
+	MemberID string `gorm:"column:member_id;not null;index;type:text"`
 
 	LastRun *time.Time `gorm:"column:last_run;type:datetime"`
 	NextRun *time.Time `gorm:"column:next_run;type:datetime"`

@@ -29,10 +29,10 @@ func (r *BackupJobRepository) Create(job *BackupJob) error {
 	return nil
 }
 
-// FindActiveByID returns an active backup job by primary key.
-func (r *BackupJobRepository) FindActiveByID(id string) (*BackupJob, error) {
+// FindActiveByID returns an active backup job owned by memberID.
+func (r *BackupJobRepository) FindActiveByID(id, memberID string) (*BackupJob, error) {
 	var job BackupJob
-	err := r.db.Where("id = ? AND active = ?", id, true).First(&job).Error
+	err := r.db.Where("id = ? AND active = ? AND member_id = ?", id, true, memberID).First(&job).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrBackupJobNotFound
 	}
@@ -42,10 +42,10 @@ func (r *BackupJobRepository) FindActiveByID(id string) (*BackupJob, error) {
 	return &job, nil
 }
 
-// ListActive returns all active backup jobs ordered by created date descending.
-func (r *BackupJobRepository) ListActive() ([]BackupJob, error) {
+// ListActive returns active backup jobs owned by memberID ordered by created date descending.
+func (r *BackupJobRepository) ListActive(memberID string) ([]BackupJob, error) {
 	var jobs []BackupJob
-	err := r.db.Where("active = ?", true).Order("created_at DESC").Find(&jobs).Error
+	err := r.db.Where("active = ? AND member_id = ?", true, memberID).Order("created_at DESC").Find(&jobs).Error
 	if err != nil {
 		return nil, fmt.Errorf("backup job repo: list: %w", err)
 	}
@@ -64,10 +64,10 @@ func (r *BackupJobRepository) Update(job *BackupJob) error {
 	return nil
 }
 
-// MarkInactive sets active=false for the backup job (soft delete).
-func (r *BackupJobRepository) MarkInactive(id string) error {
+// MarkInactive sets active=false for the backup job owned by memberID (soft delete).
+func (r *BackupJobRepository) MarkInactive(id, memberID string) error {
 	result := r.db.Model(&BackupJob{}).
-		Where("id = ? AND active = ?", id, true).
+		Where("id = ? AND active = ? AND member_id = ?", id, true, memberID).
 		Updates(map[string]interface{}{
 			"active":     false,
 			"updated_at": time.Now().UTC(),

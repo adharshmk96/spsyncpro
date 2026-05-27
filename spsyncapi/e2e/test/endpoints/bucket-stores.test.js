@@ -79,4 +79,32 @@ describe("bucket-stores endpoints", () => {
     const getAfterDelete = await apiRequest("GET", `/bucket-stores/${id}`, { token });
     expect(getAfterDelete.status).toBe(404);
   });
+
+  test("GET /bucket-stores/:id returns 404 for another member's store", async () => {
+    const userA = await registerAndLogin();
+    const create = await apiRequest("POST", "/bucket-stores", {
+      token: userA.token,
+      body: makeBucketStorePayload(),
+    });
+    expect(create.status).toBe(201);
+
+    const userB = await registerAndLogin();
+    const response = await apiRequest("GET", `/bucket-stores/${create.body.bucket_store.id}`, {
+      token: userB.token,
+    });
+    expect(response.status).toBe(404);
+  });
+
+  test("GET /bucket-stores excludes another member's stores", async () => {
+    const userA = await registerAndLogin();
+    await apiRequest("POST", "/bucket-stores", {
+      token: userA.token,
+      body: makeBucketStorePayload(),
+    });
+
+    const userB = await registerAndLogin();
+    const response = await apiRequest("GET", "/bucket-stores", { token: userB.token });
+    expect(response.status).toBe(200);
+    expect(response.body.bucket_stores).toHaveLength(0);
+  });
 });

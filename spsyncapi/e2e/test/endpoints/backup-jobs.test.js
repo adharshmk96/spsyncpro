@@ -121,4 +121,55 @@ describe("backup-jobs endpoints", () => {
     const getAfterDelete = await apiRequest("GET", `/backup-jobs/${id}`, { token });
     expect(getAfterDelete.status).toBe(404);
   });
+
+  test("GET /backup-jobs/:id returns 404 for another member's job", async () => {
+    const userA = await registerAndLogin();
+    const deps = await (async () => {
+      const orgResponse = await apiRequest("POST", "/organizations", {
+        token: userA.token,
+        body: makeOrganizationPayload(),
+      });
+      const storeResponse = await apiRequest("POST", "/bucket-stores", {
+        token: userA.token,
+        body: makeBucketStorePayload(),
+      });
+      return {
+        organizationId: orgResponse.body.organization.id,
+        bucketStoreId: storeResponse.body.bucket_store.id,
+      };
+    })();
+    const create = await apiRequest("POST", "/backup-jobs", {
+      token: userA.token,
+      body: makeBackupJobPayload(deps),
+    });
+    expect(create.status).toBe(201);
+
+    const userB = await registerAndLogin();
+    const response = await apiRequest("GET", `/backup-jobs/${create.body.backup_job.id}`, {
+      token: userB.token,
+    });
+    expect(response.status).toBe(404);
+  });
+
+  test("POST /backup-jobs rejects another member's organization and bucket references", async () => {
+    const userA = await registerAndLogin();
+    const orgResponse = await apiRequest("POST", "/organizations", {
+      token: userA.token,
+      body: makeOrganizationPayload(),
+    });
+    const storeResponse = await apiRequest("POST", "/bucket-stores", {
+      token: userA.token,
+      body: makeBucketStorePayload(),
+    });
+
+    const userB = await registerAndLogin();
+    const response = await apiRequest("POST", "/backup-jobs", {
+      token: userB.token,
+      body: makeBackupJobPayload({
+        organizationId: orgResponse.body.organization.id,
+        bucketStoreId: storeResponse.body.bucket_store.id,
+      }),
+    });
+    expect(response.status).toBe(400);
+  });
 });

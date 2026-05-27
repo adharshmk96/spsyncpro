@@ -18,6 +18,7 @@ var (
 	ErrInvalidBucketName = errors.New("bucket_name is required")
 	ErrInvalidBucketType = errors.New("bucket_type must be s3 or azure")
 	ErrInvalidConfig     = errors.New("config is required")
+	ErrInvalidMemberID   = errors.New("member id is required")
 	ErrBucketStoreNotFound = errors.New("bucket store not found")
 	ErrBucketNameTaken   = errors.New("bucket name already registered")
 )
@@ -45,6 +46,7 @@ type BucketStoreDetails struct {
 
 // CreateInput holds fields for creating a bucket store.
 type CreateInput struct {
+	MemberID   string
 	BucketName string
 	BucketType string
 	Config     json.RawMessage
@@ -92,6 +94,9 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 
 // Create registers a new bucket store with encrypted config.
 func (s *Service) Create(in CreateInput) (*BucketStoreDetails, error) {
+	if strings.TrimSpace(in.MemberID) == "" {
+		return nil, ErrInvalidMemberID
+	}
 	bucketType, err := normaliseBucketType(in.BucketType)
 	if err != nil {
 		return nil, err
@@ -113,6 +118,7 @@ func (s *Service) Create(in CreateInput) (*BucketStoreDetails, error) {
 	now := time.Now().UTC()
 	store := &storage.BucketStore{
 		ID:              uuid.NewString(),
+		MemberID:        in.MemberID,
 		BucketName:      in.BucketName,
 		BucketType:      bucketType,
 		ConfigEncrypted: encrypted,
@@ -131,9 +137,12 @@ func (s *Service) Create(in CreateInput) (*BucketStoreDetails, error) {
 	return toDetails(store), nil
 }
 
-// Get returns an active bucket store by ID.
-func (s *Service) Get(id string) (*BucketStoreDetails, error) {
-	store, err := s.repo.FindActiveByID(id)
+// Get returns an active bucket store by ID for the given member.
+func (s *Service) Get(memberID, id string) (*BucketStoreDetails, error) {
+	if strings.TrimSpace(memberID) == "" {
+		return nil, ErrInvalidMemberID
+	}
+	store, err := s.repo.FindActiveByID(id, memberID)
 	if err != nil {
 		if errors.Is(err, storage.ErrBucketStoreNotFound) {
 			return nil, ErrBucketStoreNotFound
@@ -143,9 +152,12 @@ func (s *Service) Get(id string) (*BucketStoreDetails, error) {
 	return toDetails(store), nil
 }
 
-// List returns all active bucket stores.
-func (s *Service) List() ([]BucketStoreDetails, error) {
-	stores, err := s.repo.ListActive()
+// List returns all active bucket stores for the given member.
+func (s *Service) List(memberID string) ([]BucketStoreDetails, error) {
+	if strings.TrimSpace(memberID) == "" {
+		return nil, ErrInvalidMemberID
+	}
+	stores, err := s.repo.ListActive(memberID)
 	if err != nil {
 		return nil, fmt.Errorf("list bucket stores: %w", err)
 	}
@@ -158,7 +170,10 @@ func (s *Service) List() ([]BucketStoreDetails, error) {
 }
 
 // Update modifies an active bucket store. Config is re-encrypted when provided.
-func (s *Service) Update(in UpdateInput) (*BucketStoreDetails, error) {
+func (s *Service) Update(memberID string, in UpdateInput) (*BucketStoreDetails, error) {
+	if strings.TrimSpace(memberID) == "" {
+		return nil, ErrInvalidMemberID
+	}
 	if strings.TrimSpace(in.ID) == "" {
 		return nil, ErrBucketStoreNotFound
 	}
@@ -171,7 +186,7 @@ func (s *Service) Update(in UpdateInput) (*BucketStoreDetails, error) {
 		return nil, err
 	}
 
-	store, err := s.repo.FindActiveByID(in.ID)
+	store, err := s.repo.FindActiveByID(in.ID, memberID)
 	if err != nil {
 		if errors.Is(err, storage.ErrBucketStoreNotFound) {
 			return nil, ErrBucketStoreNotFound
@@ -180,7 +195,7 @@ func (s *Service) Update(in UpdateInput) (*BucketStoreDetails, error) {
 	}
 
 	if name := strings.TrimSpace(in.BucketName); name != "" && name != store.BucketName {
-		existing, findErr := s.repo.FindByBucketName(name)
+		existing, findErr := s.repo.FindByBucketName(name, memberID)
 		if findErr == nil && existing.ID != store.ID {
 			return nil, ErrBucketNameTaken
 		}
@@ -216,8 +231,11 @@ func (s *Service) Update(in UpdateInput) (*BucketStoreDetails, error) {
 }
 
 // Delete marks a bucket store inactive (soft delete).
-func (s *Service) Delete(id string) error {
-	if err := s.repo.MarkInactive(id); err != nil {
+func (s *Service) Delete(memberID, id string) error {
+	if strings.TrimSpace(memberID) == "" {
+		return ErrInvalidMemberID
+	}
+	if err := s.repo.MarkInactive(id, memberID); err != nil {
 		if errors.Is(err, storage.ErrBucketStoreNotFound) {
 			return ErrBucketStoreNotFound
 		}

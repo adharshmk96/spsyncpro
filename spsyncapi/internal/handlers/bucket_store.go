@@ -58,12 +58,18 @@ type bucketStoreListResponse struct {
 // @Failure      500   {object}  errorResponse
 // @Router       /bucket-stores [post]
 func (h *BucketStoreHandler) Create(c *gin.Context) {
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
 	var req createBucketStoreRequest
 	if !bindJSON(c, &req) {
 		return
 	}
 
 	details, err := h.svc.Create(bucketstore.CreateInput{
+		MemberID:   memberID,
 		BucketName: req.BucketName,
 		BucketType: req.BucketType,
 		Config:     req.Config,
@@ -88,7 +94,12 @@ func (h *BucketStoreHandler) Create(c *gin.Context) {
 // @Failure      500  {object}  errorResponse
 // @Router       /bucket-stores [get]
 func (h *BucketStoreHandler) List(c *gin.Context) {
-	stores, err := h.svc.List()
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
+	stores, err := h.svc.List(memberID)
 	if err != nil {
 		h.handleBucketStoreError(c, err)
 		return
@@ -113,8 +124,13 @@ func (h *BucketStoreHandler) List(c *gin.Context) {
 // @Failure      500  {object}  errorResponse
 // @Router       /bucket-stores/{id} [get]
 func (h *BucketStoreHandler) Get(c *gin.Context) {
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
 	id := c.Param("id")
-	details, err := h.svc.Get(id)
+	details, err := h.svc.Get(memberID, id)
 	if err != nil {
 		h.handleBucketStoreError(c, err)
 		return
@@ -140,12 +156,17 @@ func (h *BucketStoreHandler) Get(c *gin.Context) {
 // @Failure      500   {object}  errorResponse
 // @Router       /bucket-stores/{id} [put]
 func (h *BucketStoreHandler) Update(c *gin.Context) {
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
 	var req updateBucketStoreRequest
 	if !bindJSON(c, &req) {
 		return
 	}
 
-	details, err := h.svc.Update(bucketstore.UpdateInput{
+	details, err := h.svc.Update(memberID, bucketstore.UpdateInput{
 		ID:         c.Param("id"),
 		BucketName: req.BucketName,
 		BucketType: req.BucketType,
@@ -173,7 +194,12 @@ func (h *BucketStoreHandler) Update(c *gin.Context) {
 // @Failure      500  {object}  errorResponse
 // @Router       /bucket-stores/{id} [delete]
 func (h *BucketStoreHandler) Delete(c *gin.Context) {
-	if err := h.svc.Delete(c.Param("id")); err != nil {
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
+	if err := h.svc.Delete(memberID, c.Param("id")); err != nil {
 		h.handleBucketStoreError(c, err)
 		return
 	}

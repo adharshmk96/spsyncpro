@@ -2,6 +2,7 @@ package bucketstore_test
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"os"
 	"testing"
@@ -9,6 +10,11 @@ import (
 	"spsyncapi/internal/bucketstore"
 	"spsyncapi/internal/crypto"
 	"spsyncapi/internal/storage"
+)
+
+const (
+	testMemberA = "member-test-a"
+	testMemberB = "member-test-b"
 )
 
 func newTestBucketStoreService(t *testing.T) *bucketstore.Service {
@@ -37,9 +43,8 @@ func newTestBucketStoreService(t *testing.T) *bucketstore.Service {
 	return svc
 }
 
-func TestCreate_Get_List_Delete_S3(t *testing.T) {
-	svc := newTestBucketStoreService(t)
-
+func s3Config(t *testing.T) json.RawMessage {
+	t.Helper()
 	config, err := json.Marshal(bucketstore.S3Config{
 		Server:    "https://s3.example.com",
 		AccessKey: "key",
@@ -48,17 +53,23 @@ func TestCreate_Get_List_Delete_S3(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal config: %v", err)
 	}
+	return config
+}
+
+func TestCreate_Get_List_Delete_S3(t *testing.T) {
+	svc := newTestBucketStoreService(t)
 
 	created, err := svc.Create(bucketstore.CreateInput{
+		MemberID:   testMemberA,
 		BucketName: "backup-primary",
 		BucketType: "s3",
-		Config:     config,
+		Config:     s3Config(t),
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	got, err := svc.Get(created.ID)
+	got, err := svc.Get(testMemberA, created.ID)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -66,7 +77,7 @@ func TestCreate_Get_List_Delete_S3(t *testing.T) {
 		t.Fatalf("unexpected details: %+v", got)
 	}
 
-	list, err := svc.List()
+	list, err := svc.List(testMemberA)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -74,11 +85,11 @@ func TestCreate_Get_List_Delete_S3(t *testing.T) {
 		t.Fatalf("list len: got %d", len(list))
 	}
 
-	if err := svc.Delete(created.ID); err != nil {
+	if err := svc.Delete(testMemberA, created.ID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 
-	if _, err := svc.Get(created.ID); err == nil {
+	if _, err := svc.Get(testMemberA, created.ID); err == nil {
 		t.Fatal("expected not found after delete")
 	}
 }
@@ -94,6 +105,7 @@ func TestCreate_Azure(t *testing.T) {
 	}
 
 	created, err := svc.Create(bucketstore.CreateInput{
+		MemberID:   testMemberA,
 		BucketName: "azure-backup",
 		BucketType: "azure_blob",
 		Config:     config,
@@ -109,14 +121,11 @@ func TestCreate_Azure(t *testing.T) {
 func TestCreate_DuplicateBucketName(t *testing.T) {
 	svc := newTestBucketStoreService(t)
 
-	config, _ := json.Marshal(bucketstore.S3Config{
-		Server: "https://s3.example.com", AccessKey: "k", SecretKey: "s",
-	})
-
 	in := bucketstore.CreateInput{
+		MemberID:   testMemberA,
 		BucketName: "dup-bucket",
 		BucketType: "s3",
-		Config:     config,
+		Config:     s3Config(t),
 	}
 	if _, err := svc.Create(in); err != nil {
 		t.Fatalf("first create: %v", err)
@@ -130,23 +139,66 @@ func TestCreate_DuplicateBucketName(t *testing.T) {
 	}
 }
 
-func TestUpdate_ConfigOptional(t *testing.T) {
+func TestDuplicateBucketName_DifferentMembers(t *testing.T) {
 	svc := newTestBucketStoreService(t)
 
-	config, _ := json.Marshal(bucketstore.S3Config{
-		Server: "https://s3.example.com", AccessKey: "k", SecretKey: "s",
-	})
+	base := bucketstore.CreateInput{
+		BucketName: "shared-bucket",
+		BucketType: "s3",
+		Config:     s3Config(t),
+	}
+
+	base.MemberID = testMemberA
+	if _, err := svc.Create(base); err != nil {
+		t.Fatalf("member A create: %v", err)
+	}
+
+	base.MemberID = testMemberB
+	if _, err := svc.Create(base); err != nil {
+		t.Fatalf("member B create with same bucket name: %v", err)
+	}
+}
+
+func TestMemberIsolation(t *testing.T) {
+	svc := newTestBucketStoreService(t)
 
 	created, err := svc.Create(bucketstore.CreateInput{
-		BucketName: "store-1",
+		MemberID:   testMemberA,
+		BucketName: "private-bucket",
 		BucketType: "s3",
-		Config:     config,
+		Config:     s3Config(t),
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	updated, err := svc.Update(bucketstore.UpdateInput{
+	if _, err := svc.Get(testMemberB, created.ID); !errors.Is(err, bucketstore.ErrBucketStoreNotFound) {
+		t.Fatalf("expected not found for other member, got: %v", err)
+	}
+
+	list, err := svc.List(testMemberB)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("other member list should be empty, got %d", len(list))
+	}
+}
+
+func TestUpdate_ConfigOptional(t *testing.T) {
+	svc := newTestBucketStoreService(t)
+
+	created, err := svc.Create(bucketstore.CreateInput{
+		MemberID:   testMemberA,
+		BucketName: "store-1",
+		BucketType: "s3",
+		Config:     s3Config(t),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	updated, err := svc.Update(testMemberA, bucketstore.UpdateInput{
 		ID:         created.ID,
 		BucketName: "store-1-renamed",
 		BucketType: "s3",
@@ -164,6 +216,7 @@ func TestCreate_InvalidConfig(t *testing.T) {
 
 	config, _ := json.Marshal(map[string]string{"server": "only-server"})
 	_, err := svc.Create(bucketstore.CreateInput{
+		MemberID:   testMemberA,
 		BucketName: "bad-config",
 		BucketType: "s3",
 		Config:     config,
