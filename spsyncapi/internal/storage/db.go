@@ -30,6 +30,10 @@ func Open(sqlitePath string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("storage: enable WAL mode: %w", err)
 	}
 
+	// if err := preMigrateOwnership(db); err != nil {
+	// 	return nil, fmt.Errorf("storage: pre-migrate ownership: %w", err)
+	// }
+
 	if err := db.AutoMigrate(
 		&Member{},
 		&Session{},
@@ -46,9 +50,9 @@ func Open(sqlitePath string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("storage: auto migrate: %w", err)
 	}
 
-	if err := migrateResourceOwnership(db); err != nil {
-		return nil, fmt.Errorf("storage: migrate resource ownership: %w", err)
-	}
+	// if err := postMigrateOwnership(db); err != nil {
+	// 	return nil, fmt.Errorf("storage: post-migrate ownership: %w", err)
+	// }
 
 	return db, nil
 }

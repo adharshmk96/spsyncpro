@@ -17,7 +17,7 @@ metrics:
   export_interval: 15s
 
 db:
-  sqlite_path: ./data/spsyncapi.sqlite
+  sqlite_path: ./data/spsyncapi2.sqlite
 
 auth:
   jwt_secret: change-me-in-production
