@@ -20,6 +20,7 @@ type Deps struct {
 	BucketStoreHandler  *handlers.BucketStoreHandler
 	BackupJobHandler    *handlers.BackupJobHandler
 	BackupRunHandler    *handlers.BackupRunHandler
+	RestoreJobHandler   *handlers.RestoreJobHandler
 	RestoreRunHandler   *handlers.RestoreRunHandler
 	AuthService         *auth.Service
 	JWTConfig           auth.JWTConfig
@@ -67,12 +68,22 @@ func Register(router *gin.Engine, deps Deps) {
 			protected.GET("/backup-jobs/:id", deps.BackupJobHandler.Get)
 			protected.PUT("/backup-jobs/:id", deps.BackupJobHandler.Update)
 			protected.DELETE("/backup-jobs/:id", deps.BackupJobHandler.Delete)
+			protected.POST("/backup-jobs/:id/runs", deps.BackupRunHandler.StartForJob)
 
 			protected.GET("/backup-runs", deps.BackupRunHandler.List)
 			protected.GET("/backup-runs/:id", deps.BackupRunHandler.Get)
+			protected.POST("/backup-runs/:id/stop", deps.BackupRunHandler.Stop)
+
+			protected.POST("/restore-jobs", deps.RestoreJobHandler.Create)
+			protected.GET("/restore-jobs", deps.RestoreJobHandler.List)
+			protected.GET("/restore-jobs/:id", deps.RestoreJobHandler.Get)
+			protected.PUT("/restore-jobs/:id", deps.RestoreJobHandler.Update)
+			protected.DELETE("/restore-jobs/:id", deps.RestoreJobHandler.Delete)
+			protected.POST("/restore-jobs/:id/runs", deps.RestoreRunHandler.StartForJob)
 
 			protected.GET("/restore-runs", deps.RestoreRunHandler.List)
 			protected.GET("/restore-runs/:id", deps.RestoreRunHandler.Get)
+			protected.POST("/restore-runs/:id/stop", deps.RestoreRunHandler.Stop)
 		}
 	}
 }

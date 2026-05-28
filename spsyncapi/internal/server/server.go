@@ -16,10 +16,12 @@ import (
 	"spsyncapi/internal/handlers"
 	"spsyncapi/internal/middleware"
 	"spsyncapi/internal/organization"
+	"spsyncapi/internal/restorejob"
 	"spsyncapi/internal/restorerun"
 	"spsyncapi/internal/routes"
 	"spsyncapi/internal/storage"
 	"spsyncapi/internal/telemetry"
+	"spsyncapi/internal/temporal"
 
 	"github.com/gin-gonic/gin"
 )
@@ -102,29 +104,50 @@ func New(cfg *config.Config, logger *slog.Logger, metrics *telemetry.HTTPMetrics
 		return nil, fmt.Errorf("create bucket store service: %w", err)
 	}
 
+	temporalClient, err := temporal.NewClient(cfg.Temporal)
+	if err != nil {
+		return nil, fmt.Errorf("temporal client: %w", err)
+	}
+
+	scheduleOrchestrator := temporal.NewScheduleOrchestrator(temporalClient, cfg.Temporal, logger)
+	runExecutor := temporal.NewRunExecutor(temporalClient, cfg.Temporal)
+
 	backupJobSvc, err := backupjob.NewService(backupjob.ServiceConfig{
-		Repo:       backupJobRepo,
-		OrgRepo:    orgRepo,
-		BucketRepo: bucketStoreRepo,
-		Logger:     logger,
+		Repo:           backupJobRepo,
+		OrgRepo:        orgRepo,
+		BucketRepo:     bucketStoreRepo,
+		ScheduleSyncer: scheduleOrchestrator,
+		Logger:         logger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create backup job service: %w", err)
 	}
 
+	restoreJobSvc, err := restorejob.NewService(restorejob.ServiceConfig{
+		Repo:       restoreJobRepo,
+		OrgRepo:    orgRepo,
+		BucketRepo: bucketStoreRepo,
+		Logger:     logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create restore job service: %w", err)
+	}
+
 	backupRunSvc, err := backuprun.NewService(backuprun.ServiceConfig{
-		RunRepo: backupRunRepo,
-		JobRepo: backupJobRepo,
-		Logger:  logger,
+		RunRepo:  backupRunRepo,
+		JobRepo:  backupJobRepo,
+		Executor: runExecutor,
+		Logger:   logger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create backup run service: %w", err)
 	}
 
 	restoreRunSvc, err := restorerun.NewService(restorerun.ServiceConfig{
-		RunRepo: restoreRunRepo,
-		JobRepo: restoreJobRepo,
-		Logger:  logger,
+		RunRepo:  restoreRunRepo,
+		JobRepo:  restoreJobRepo,
+		Executor: runExecutor,
+		Logger:   logger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create restore run service: %w", err)
@@ -143,6 +166,7 @@ func New(cfg *config.Config, logger *slog.Logger, metrics *telemetry.HTTPMetrics
 		BucketStoreHandler:  handlers.NewBucketStoreHandler(bucketStoreSvc, logger),
 		BackupJobHandler:    handlers.NewBackupJobHandler(backupJobSvc, logger),
 		BackupRunHandler:    handlers.NewBackupRunHandler(backupRunSvc, logger),
+		RestoreJobHandler:   handlers.NewRestoreJobHandler(restoreJobSvc, logger),
 		RestoreRunHandler:   handlers.NewRestoreRunHandler(restoreRunSvc, logger),
 		AuthService:         authSvc,
 		JWTConfig:           jwtCfg,

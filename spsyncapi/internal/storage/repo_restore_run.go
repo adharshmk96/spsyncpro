@@ -20,6 +20,37 @@ func NewRestoreRunRepository(db *gorm.DB) *RestoreRunRepository {
 	return &RestoreRunRepository{db: db}
 }
 
+// Update persists changes to a restore run row.
+func (r *RestoreRunRepository) Update(run *RestoreRun) error {
+	if err := r.db.Save(run).Error; err != nil {
+		return fmt.Errorf("restore run repo: update: %w", err)
+	}
+	return nil
+}
+
+// ListIncomplete returns restore runs that have not finished (end_at IS NULL).
+func (r *RestoreRunRepository) ListIncomplete() ([]RestoreRun, error) {
+	var runs []RestoreRun
+	err := r.db.Where("end_at IS NULL").Find(&runs).Error
+	if err != nil {
+		return nil, fmt.Errorf("restore run repo: list incomplete: %w", err)
+	}
+	return runs, nil
+}
+
+// FindFileTransferByRunAndPath returns a file transfer for idempotent activity retries.
+func (r *RestoreRunRepository) FindFileTransferByRunAndPath(runID, filePath string) (*RestoreRunFileTransfer, error) {
+	var ft RestoreRunFileTransfer
+	err := r.db.Where("run_id = ? AND file_path = ?", runID, filePath).First(&ft).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("restore run repo: find file transfer: %w", err)
+	}
+	return &ft, nil
+}
+
 // Create inserts a new restore run.
 func (r *RestoreRunRepository) Create(run *RestoreRun) error {
 	if err := r.db.Create(run).Error; err != nil {

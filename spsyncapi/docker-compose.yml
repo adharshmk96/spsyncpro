@@ -1,0 +1,23 @@
+services:
+  temporal:
+    image: temporalio/server:1.29.0
+    container_name: spsyncapi-temporal
+    restart: unless-stopped
+    entrypoint: ["temporal"]
+    command: ["server", "start-dev", "--ip", "0.0.0.0"]
+    ports:
+      - "7233:7233"
+      - "8233:8233"
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    container_name: spsyncapi-temporal-ui
+    restart: unless-stopped
+    depends_on:
+      temporal:
+        condition: service_started
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8088:8080"

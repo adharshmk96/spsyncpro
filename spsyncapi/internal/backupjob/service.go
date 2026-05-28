@@ -1,6 +1,7 @@
 package backupjob
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -113,18 +114,26 @@ type BackupJobDetails struct {
 	UpdatedAt time.Time        `json:"updated_at"`
 }
 
+// ScheduleSyncer syncs backup jobs to Temporal schedules.
+type ScheduleSyncer interface {
+	SyncJob(ctx context.Context, job *storage.BackupJob) error
+	DeleteJobSchedule(ctx context.Context, jobID string) error
+}
+
 type Service struct {
-	repo        *storage.BackupJobRepository
-	orgRepo     *storage.OrganizationRepository
-	bucketRepo  *storage.BucketStoreRepository
-	logger      *slog.Logger
+	repo           *storage.BackupJobRepository
+	orgRepo        *storage.OrganizationRepository
+	bucketRepo     *storage.BucketStoreRepository
+	scheduleSyncer ScheduleSyncer
+	logger         *slog.Logger
 }
 
 type ServiceConfig struct {
-	Repo       *storage.BackupJobRepository
-	OrgRepo    *storage.OrganizationRepository
-	BucketRepo *storage.BucketStoreRepository
-	Logger     *slog.Logger
+	Repo           *storage.BackupJobRepository
+	OrgRepo        *storage.OrganizationRepository
+	BucketRepo     *storage.BucketStoreRepository
+	ScheduleSyncer ScheduleSyncer
+	Logger         *slog.Logger
 }
 
 func NewService(cfg ServiceConfig) (*Service, error) {
@@ -140,13 +149,23 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 	if cfg.Logger == nil {
 		return nil, errors.New("logger is required")
 	}
+	syncer := cfg.ScheduleSyncer
+	if syncer == nil {
+		syncer = noopScheduleSyncer{}
+	}
 	return &Service{
-		repo:       cfg.Repo,
-		orgRepo:    cfg.OrgRepo,
-		bucketRepo: cfg.BucketRepo,
-		logger:     cfg.Logger,
+		repo:           cfg.Repo,
+		orgRepo:        cfg.OrgRepo,
+		bucketRepo:     cfg.BucketRepo,
+		scheduleSyncer: syncer,
+		logger:         cfg.Logger,
 	}, nil
 }
+
+type noopScheduleSyncer struct{}
+
+func (noopScheduleSyncer) SyncJob(context.Context, *storage.BackupJob) error      { return nil }
+func (noopScheduleSyncer) DeleteJobSchedule(context.Context, string) error { return nil }
 
 func (s *Service) Create(in CreateInput) (*BackupJobDetails, error) {
 	if strings.TrimSpace(in.MemberID) == "" {
@@ -188,6 +207,9 @@ func (s *Service) Create(in CreateInput) (*BackupJobDetails, error) {
 
 	if err := s.repo.Create(job); err != nil {
 		return nil, fmt.Errorf("create backup job: %w", err)
+	}
+	if err := s.syncSchedule(context.Background(), job); err != nil {
+		return nil, err
 	}
 	return toDetails(job), nil
 }
@@ -279,6 +301,9 @@ func (s *Service) Update(memberID string, in UpdateInput) (*BackupJobDetails, er
 		}
 		return nil, fmt.Errorf("update backup job: %w", err)
 	}
+	if err := s.syncSchedule(context.Background(), job); err != nil {
+		return nil, err
+	}
 	return toDetails(job), nil
 }
 
@@ -286,11 +311,22 @@ func (s *Service) Delete(memberID, id string) error {
 	if strings.TrimSpace(memberID) == "" {
 		return ErrInvalidMemberID
 	}
-	if err := s.repo.MarkInactive(strings.TrimSpace(id), memberID); err != nil {
+	jobID := strings.TrimSpace(id)
+	if err := s.repo.MarkInactive(jobID, memberID); err != nil {
 		if errors.Is(err, storage.ErrBackupJobNotFound) {
 			return ErrBackupJobNotFound
 		}
 		return fmt.Errorf("delete backup job: %w", err)
+	}
+	if err := s.scheduleSyncer.DeleteJobSchedule(context.Background(), jobID); err != nil {
+		return fmt.Errorf("delete backup job schedule: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) syncSchedule(ctx context.Context, job *storage.BackupJob) error {
+	if err := s.scheduleSyncer.SyncJob(ctx, job); err != nil {
+		return fmt.Errorf("sync backup job schedule: %w", err)
 	}
 	return nil
 }

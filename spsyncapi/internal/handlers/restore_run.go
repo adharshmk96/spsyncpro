@@ -124,12 +124,75 @@ func (h *RestoreRunHandler) Get(c *gin.Context) {
 	})
 }
 
+// StartForJob creates and starts a restore run for a job.
+//
+// @Summary      Start restore run
+// @Description  Creates a restore run row and starts the Temporal workflow
+// @Tags         restore-runs
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "Restore job ID"
+// @Success      201  {object}  restoreRunStartResponse
+// @Failure      400  {object}  errorResponse
+// @Failure      401  {object}  errorResponse
+// @Failure      404  {object}  errorResponse
+// @Failure      500  {object}  errorResponse
+// @Router       /restore-jobs/{id}/runs [post]
+func (h *RestoreRunHandler) StartForJob(c *gin.Context) {
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
+	details, err := h.svc.StartRun(c.Request.Context(), memberID, c.Param("id"))
+	if err != nil {
+		h.handleRestoreRunError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, restoreRunStartResponse{RestoreRun: *details})
+}
+
+// Stop cancels an in-progress restore run.
+//
+// @Summary      Stop restore run
+// @Description  Cancels the Temporal workflow for an in-progress restore run
+// @Tags         restore-runs
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "Restore run ID"
+// @Success      200  {object}  restoreRunStartResponse
+// @Failure      400  {object}  errorResponse
+// @Failure      401  {object}  errorResponse
+// @Failure      404  {object}  errorResponse
+// @Failure      409  {object}  errorResponse
+// @Failure      500  {object}  errorResponse
+// @Router       /restore-runs/{id}/stop [post]
+func (h *RestoreRunHandler) Stop(c *gin.Context) {
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
+	details, err := h.svc.StopRun(c.Request.Context(), memberID, c.Param("id"))
+	if err != nil {
+		h.handleRestoreRunError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, restoreRunStartResponse{RestoreRun: *details})
+}
+
+type restoreRunStartResponse struct {
+	RestoreRun restorerun.RunDetails `json:"restore_run"`
+}
+
 func (h *RestoreRunHandler) handleRestoreRunError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, restorerun.ErrRestoreRunNotFound):
 		respondError(c, http.StatusNotFound, "restore run not found")
 	case errors.Is(err, restorerun.ErrRestoreJobNotFound):
 		respondError(c, http.StatusNotFound, "restore job not found")
+	case errors.Is(err, restorerun.ErrRunNotInProgress):
+		respondError(c, http.StatusConflict, err.Error())
 	default:
 		h.logger.Error("unhandled restore run error", "error", err)
 		respondError(c, http.StatusInternalServerError, "internal server error")

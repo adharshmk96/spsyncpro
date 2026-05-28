@@ -1,6 +1,7 @@
 package backuprun
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -8,13 +9,25 @@ import (
 	"time"
 
 	"spsyncapi/internal/storage"
+	"spsyncapi/internal/temporal"
+
+	"github.com/google/uuid"
 )
 
 var (
-	ErrBackupRunNotFound   = errors.New("backup run not found")
-	ErrBackupJobNotFound   = errors.New("backup job not found")
-	ErrInvalidMemberID = errors.New("member id is required")
+	ErrBackupRunNotFound    = errors.New("backup run not found")
+	ErrBackupJobNotFound    = errors.New("backup job not found")
+	ErrInvalidMemberID      = errors.New("member id is required")
+	ErrRunAlreadyRunning    = errors.New("backup run already in progress for this job")
+	ErrRunAlreadyComplete   = errors.New("backup run already complete")
+	ErrRunNotInProgress     = errors.New("backup run is not in progress")
 )
+
+// RunExecutor starts and stops Temporal workflows for backup runs.
+type RunExecutor interface {
+	StartBackupRun(ctx context.Context, in temporal.RunWorkflowInput) error
+	StopBackupRun(ctx context.Context, runID string) error
+}
 
 // RunDetails is the API representation of a backup run.
 type RunDetails struct {
@@ -45,15 +58,17 @@ type GetResult struct {
 }
 
 type Service struct {
-	runRepo *storage.BackupRunRepository
-	jobRepo *storage.BackupJobRepository
-	logger  *slog.Logger
+	runRepo  *storage.BackupRunRepository
+	jobRepo  *storage.BackupJobRepository
+	executor RunExecutor
+	logger   *slog.Logger
 }
 
 type ServiceConfig struct {
-	RunRepo *storage.BackupRunRepository
-	JobRepo *storage.BackupJobRepository
-	Logger  *slog.Logger
+	RunRepo  *storage.BackupRunRepository
+	JobRepo  *storage.BackupJobRepository
+	Executor RunExecutor
+	Logger   *slog.Logger
 }
 
 func NewService(cfg ServiceConfig) (*Service, error) {
@@ -67,10 +82,72 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 		return nil, errors.New("logger is required")
 	}
 	return &Service{
-		runRepo: cfg.RunRepo,
-		jobRepo: cfg.JobRepo,
-		logger:  cfg.Logger,
+		runRepo:  cfg.RunRepo,
+		jobRepo:  cfg.JobRepo,
+		executor: cfg.Executor,
+		logger:   cfg.Logger,
 	}, nil
+}
+
+// StartRun creates a backup run and starts its Temporal workflow.
+func (s *Service) StartRun(ctx context.Context, memberID, jobID string) (*RunDetails, error) {
+	if strings.TrimSpace(memberID) == "" {
+		return nil, ErrInvalidMemberID
+	}
+	if _, err := s.jobRepo.FindActiveByID(jobID, memberID); err != nil {
+		if errors.Is(err, storage.ErrBackupJobNotFound) {
+			return nil, ErrBackupJobNotFound
+		}
+		return nil, fmt.Errorf("backup run service: validate job: %w", err)
+	}
+
+	now := time.Now().UTC()
+	run := &storage.BackupRun{
+		ID:        uuid.NewString(),
+		JobID:     jobID,
+		MemberID:  memberID,
+		CreatedAt: now,
+	}
+	if err := s.runRepo.Create(run); err != nil {
+		return nil, fmt.Errorf("backup run service: create run: %w", err)
+	}
+
+	if s.executor == nil {
+		return nil, fmt.Errorf("backup run service: run executor not configured")
+	}
+	if err := s.executor.StartBackupRun(ctx, temporal.RunWorkflowInput{
+		RunID:    run.ID,
+		JobID:    jobID,
+		MemberID: memberID,
+		Resume:   true,
+	}); err != nil {
+		return nil, fmt.Errorf("backup run service: start workflow: %w", err)
+	}
+
+	details := toRunDetails(run)
+	return &details, nil
+}
+
+// StopRun cancels an in-progress backup run workflow.
+func (s *Service) StopRun(ctx context.Context, memberID, runID string) (*RunDetails, error) {
+	if strings.TrimSpace(memberID) == "" {
+		return nil, ErrInvalidMemberID
+	}
+	run, err := s.getRunWithJobCheck(memberID, runID)
+	if err != nil {
+		return nil, err
+	}
+	if run.EndAt != nil {
+		return nil, ErrRunNotInProgress
+	}
+	if s.executor == nil {
+		return nil, fmt.Errorf("backup run service: run executor not configured")
+	}
+	if err := s.executor.StopBackupRun(ctx, run.ID); err != nil {
+		return nil, fmt.Errorf("backup run service: stop workflow: %w", err)
+	}
+	details := toRunDetails(run)
+	return &details, nil
 }
 
 func (s *Service) List(memberID string, jobID *string, page, limit int) (*ListResult, error) {

@@ -186,6 +186,11 @@ definitions:
       pagination:
         $ref: '#/definitions/handlers.Pagination'
     type: object
+  handlers.backupRunStartResponse:
+    properties:
+      backup_run:
+        $ref: '#/definitions/backuprun.RunDetails'
+    type: object
   handlers.bucketStoreListResponse:
     properties:
       bucket_stores:
@@ -259,6 +264,19 @@ definitions:
     - tenant_id
     - tenant_secret
     type: object
+  handlers.createRestoreJobRequest:
+    properties:
+      active:
+        type: boolean
+      job_config:
+        $ref: '#/definitions/handlers.restoreJobConfigRequest'
+      last_run:
+        type: string
+      start_at:
+        type: string
+    required:
+    - job_config
+    type: object
   handlers.errorResponse:
     properties:
       error:
@@ -327,6 +345,31 @@ definitions:
     - password
     - token
     type: object
+  handlers.restoreJobConfigRequest:
+    properties:
+      bucket_store:
+        type: string
+      organization:
+        type: string
+      share_point_site:
+        type: string
+    required:
+    - bucket_store
+    - organization
+    - share_point_site
+    type: object
+  handlers.restoreJobListResponse:
+    properties:
+      restore_jobs:
+        items:
+          $ref: '#/definitions/restorejob.RestoreJobDetails'
+        type: array
+    type: object
+  handlers.restoreJobResponse:
+    properties:
+      restore_job:
+        $ref: '#/definitions/restorejob.RestoreJobDetails'
+    type: object
   handlers.restoreRunGetResponse:
     properties:
       file_transfers:
@@ -346,6 +389,11 @@ definitions:
         items:
           $ref: '#/definitions/restorerun.RunDetails'
         type: array
+    type: object
+  handlers.restoreRunStartResponse:
+    properties:
+      restore_run:
+        $ref: '#/definitions/restorerun.RunDetails'
     type: object
   handlers.successResponse:
     properties:
@@ -406,6 +454,19 @@ definitions:
     - name
     - tenant_id
     type: object
+  handlers.updateRestoreJobRequest:
+    properties:
+      active:
+        type: boolean
+      job_config:
+        $ref: '#/definitions/handlers.restoreJobConfigRequest'
+      last_run:
+        type: string
+      start_at:
+        type: string
+    required:
+    - job_config
+    type: object
   organization.OrganizationDetails:
     properties:
       client_id:
@@ -417,6 +478,32 @@ definitions:
       name:
         type: string
       tenant_id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  restorejob.JobConfigDetails:
+    properties:
+      bucket_store:
+        type: string
+      organization:
+        type: string
+      share_point_site:
+        type: string
+    type: object
+  restorejob.RestoreJobDetails:
+    properties:
+      active:
+        type: boolean
+      created_at:
+        type: string
+      id:
+        type: string
+      job_config:
+        $ref: '#/definitions/restorejob.JobConfigDetails'
+      last_run:
+        type: string
+      start_at:
         type: string
       updated_at:
         type: string
@@ -615,6 +702,43 @@ paths:
       summary: Update backup job
       tags:
       - backup-jobs
+  /backup-jobs/{id}/runs:
+    post:
+      description: Creates a backup run row and starts the Temporal workflow
+      parameters:
+      - description: Backup job ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.backupRunStartResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Start backup run
+      tags:
+      - backup-runs
   /backup-runs:
     get:
       description: Returns paginated backup runs; optional job_id filter
@@ -702,6 +826,47 @@ paths:
       security:
       - BearerAuth: []
       summary: Get backup run
+      tags:
+      - backup-runs
+  /backup-runs/{id}/stop:
+    post:
+      description: Cancels the Temporal workflow for an in-progress backup run
+      parameters:
+      - description: Backup run ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.backupRunStartResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Stop backup run
       tags:
       - backup-runs
   /bucket-stores:
@@ -1283,6 +1448,210 @@ paths:
       summary: Reset password
       tags:
       - auth
+  /restore-jobs:
+    get:
+      description: Returns all active restore jobs
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.restoreJobListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: List restore jobs
+      tags:
+      - restore-jobs
+    post:
+      consumes:
+      - application/json
+      description: Creates a restore job with job configuration
+      parameters:
+      - description: Restore job payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.createRestoreJobRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.restoreJobResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create restore job
+      tags:
+      - restore-jobs
+  /restore-jobs/{id}:
+    delete:
+      description: Marks a restore job inactive; the record is retained
+      parameters:
+      - description: Restore job ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.successResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete restore job
+      tags:
+      - restore-jobs
+    get:
+      description: Returns an active restore job by ID
+      parameters:
+      - description: Restore job ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.restoreJobResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get restore job
+      tags:
+      - restore-jobs
+    put:
+      consumes:
+      - application/json
+      description: Updates a restore job and job config
+      parameters:
+      - description: Restore job ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Restore job payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.updateRestoreJobRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.restoreJobResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update restore job
+      tags:
+      - restore-jobs
+  /restore-jobs/{id}/runs:
+    post:
+      description: Creates a restore run row and starts the Temporal workflow
+      parameters:
+      - description: Restore job ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.restoreRunStartResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Start restore run
+      tags:
+      - restore-runs
   /restore-runs:
     get:
       description: Returns paginated restore runs; optional job_id filter
@@ -1370,6 +1739,47 @@ paths:
       security:
       - BearerAuth: []
       summary: Get restore run
+      tags:
+      - restore-runs
+  /restore-runs/{id}/stop:
+    post:
+      description: Cancels the Temporal workflow for an in-progress restore run
+      parameters:
+      - description: Restore run ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.restoreRunStartResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Stop restore run
       tags:
       - restore-runs
 securityDefinitions:

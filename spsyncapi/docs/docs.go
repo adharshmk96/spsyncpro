@@ -277,6 +277,64 @@ const docTemplate = `{
                 }
             }
         },
+        "/backup-jobs/{id}/runs": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a backup run row and starts the Temporal workflow",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup-runs"
+                ],
+                "summary": "Start backup run",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Backup job ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.backupRunStartResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/backup-runs": {
             "get": {
                 "security": [
@@ -403,6 +461,70 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/backup-runs/{id}/stop": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Cancels the Temporal workflow for an in-progress backup run",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup-runs"
+                ],
+                "summary": "Stop backup run",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Backup run ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.backupRunStartResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/handlers.errorResponse"
                         }
@@ -1317,6 +1439,326 @@ const docTemplate = `{
                 }
             }
         },
+        "/restore-jobs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns all active restore jobs",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "restore-jobs"
+                ],
+                "summary": "List restore jobs",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.restoreJobListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a restore job with job configuration",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "restore-jobs"
+                ],
+                "summary": "Create restore job",
+                "parameters": [
+                    {
+                        "description": "Restore job payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.createRestoreJobRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.restoreJobResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/restore-jobs/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns an active restore job by ID",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "restore-jobs"
+                ],
+                "summary": "Get restore job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Restore job ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.restoreJobResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Updates a restore job and job config",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "restore-jobs"
+                ],
+                "summary": "Update restore job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Restore job ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Restore job payload",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.updateRestoreJobRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.restoreJobResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Marks a restore job inactive; the record is retained",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "restore-jobs"
+                ],
+                "summary": "Delete restore job",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Restore job ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.successResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/restore-jobs/{id}/runs": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Creates a restore run row and starts the Temporal workflow",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "restore-runs"
+                ],
+                "summary": "Start restore run",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Restore job ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.restoreRunStartResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/restore-runs": {
             "get": {
                 "security": [
@@ -1443,6 +1885,70 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/restore-runs/{id}/stop": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Cancels the Temporal workflow for an in-progress restore run",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "restore-runs"
+                ],
+                "summary": "Stop restore run",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Restore run ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.restoreRunStartResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
                         "schema": {
                             "$ref": "#/definitions/handlers.errorResponse"
                         }
@@ -1744,6 +2250,14 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.backupRunStartResponse": {
+            "type": "object",
+            "properties": {
+                "backup_run": {
+                    "$ref": "#/definitions/backuprun.RunDetails"
+                }
+            }
+        },
         "handlers.bucketStoreListResponse": {
             "type": "object",
             "properties": {
@@ -1853,6 +2367,26 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.createRestoreJobRequest": {
+            "type": "object",
+            "required": [
+                "job_config"
+            ],
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "job_config": {
+                    "$ref": "#/definitions/handlers.restoreJobConfigRequest"
+                },
+                "last_run": {
+                    "type": "string"
+                },
+                "start_at": {
+                    "type": "string"
+                }
+            }
+        },
         "handlers.errorResponse": {
             "type": "object",
             "properties": {
@@ -1957,6 +2491,44 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.restoreJobConfigRequest": {
+            "type": "object",
+            "required": [
+                "bucket_store",
+                "organization",
+                "share_point_site"
+            ],
+            "properties": {
+                "bucket_store": {
+                    "type": "string"
+                },
+                "organization": {
+                    "type": "string"
+                },
+                "share_point_site": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.restoreJobListResponse": {
+            "type": "object",
+            "properties": {
+                "restore_jobs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/restorejob.RestoreJobDetails"
+                    }
+                }
+            }
+        },
+        "handlers.restoreJobResponse": {
+            "type": "object",
+            "properties": {
+                "restore_job": {
+                    "$ref": "#/definitions/restorejob.RestoreJobDetails"
+                }
+            }
+        },
         "handlers.restoreRunGetResponse": {
             "type": "object",
             "properties": {
@@ -1985,6 +2557,14 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/restorerun.RunDetails"
                     }
+                }
+            }
+        },
+        "handlers.restoreRunStartResponse": {
+            "type": "object",
+            "properties": {
+                "restore_run": {
+                    "$ref": "#/definitions/restorerun.RunDetails"
                 }
             }
         },
@@ -2077,6 +2657,26 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.updateRestoreJobRequest": {
+            "type": "object",
+            "required": [
+                "job_config"
+            ],
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "job_config": {
+                    "$ref": "#/definitions/handlers.restoreJobConfigRequest"
+                },
+                "last_run": {
+                    "type": "string"
+                },
+                "start_at": {
+                    "type": "string"
+                }
+            }
+        },
         "organization.OrganizationDetails": {
             "type": "object",
             "properties": {
@@ -2093,6 +2693,46 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "tenant_id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "restorejob.JobConfigDetails": {
+            "type": "object",
+            "properties": {
+                "bucket_store": {
+                    "type": "string"
+                },
+                "organization": {
+                    "type": "string"
+                },
+                "share_point_site": {
+                    "type": "string"
+                }
+            }
+        },
+        "restorejob.RestoreJobDetails": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "job_config": {
+                    "$ref": "#/definitions/restorejob.JobConfigDetails"
+                },
+                "last_run": {
+                    "type": "string"
+                },
+                "start_at": {
                     "type": "string"
                 },
                 "updated_at": {

@@ -124,12 +124,75 @@ func (h *BackupRunHandler) Get(c *gin.Context) {
 	})
 }
 
+// StartForJob creates and starts a backup run for a job.
+//
+// @Summary      Start backup run
+// @Description  Creates a backup run row and starts the Temporal workflow
+// @Tags         backup-runs
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "Backup job ID"
+// @Success      201  {object}  backupRunStartResponse
+// @Failure      400  {object}  errorResponse
+// @Failure      401  {object}  errorResponse
+// @Failure      404  {object}  errorResponse
+// @Failure      500  {object}  errorResponse
+// @Router       /backup-jobs/{id}/runs [post]
+func (h *BackupRunHandler) StartForJob(c *gin.Context) {
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
+	details, err := h.svc.StartRun(c.Request.Context(), memberID, c.Param("id"))
+	if err != nil {
+		h.handleBackupRunError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, backupRunStartResponse{BackupRun: *details})
+}
+
+// Stop cancels an in-progress backup run.
+//
+// @Summary      Stop backup run
+// @Description  Cancels the Temporal workflow for an in-progress backup run
+// @Tags         backup-runs
+// @Produce      json
+// @Security     BearerAuth
+// @Param        id   path      string  true  "Backup run ID"
+// @Success      200  {object}  backupRunStartResponse
+// @Failure      400  {object}  errorResponse
+// @Failure      401  {object}  errorResponse
+// @Failure      404  {object}  errorResponse
+// @Failure      409  {object}  errorResponse
+// @Failure      500  {object}  errorResponse
+// @Router       /backup-runs/{id}/stop [post]
+func (h *BackupRunHandler) Stop(c *gin.Context) {
+	memberID, ok := requireMemberID(c)
+	if !ok {
+		return
+	}
+
+	details, err := h.svc.StopRun(c.Request.Context(), memberID, c.Param("id"))
+	if err != nil {
+		h.handleBackupRunError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, backupRunStartResponse{BackupRun: *details})
+}
+
+type backupRunStartResponse struct {
+	BackupRun backuprun.RunDetails `json:"backup_run"`
+}
+
 func (h *BackupRunHandler) handleBackupRunError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, backuprun.ErrBackupRunNotFound):
 		respondError(c, http.StatusNotFound, "backup run not found")
 	case errors.Is(err, backuprun.ErrBackupJobNotFound):
 		respondError(c, http.StatusNotFound, "backup job not found")
+	case errors.Is(err, backuprun.ErrRunNotInProgress):
+		respondError(c, http.StatusConflict, err.Error())
 	default:
 		h.logger.Error("unhandled backup run error", "error", err)
 		respondError(c, http.StatusInternalServerError, "internal server error")

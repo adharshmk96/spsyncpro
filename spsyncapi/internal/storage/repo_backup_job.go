@@ -42,6 +42,16 @@ func (r *BackupJobRepository) FindActiveByID(id, memberID string) (*BackupJob, e
 	return &job, nil
 }
 
+// ListAllActive returns all active backup jobs across members (startup schedule sync).
+func (r *BackupJobRepository) ListAllActive() ([]BackupJob, error) {
+	var jobs []BackupJob
+	err := r.db.Where("active = ?", true).Find(&jobs).Error
+	if err != nil {
+		return nil, fmt.Errorf("backup job repo: list all active: %w", err)
+	}
+	return jobs, nil
+}
+
 // ListActive returns active backup jobs owned by memberID ordered by created date descending.
 func (r *BackupJobRepository) ListActive(memberID string) ([]BackupJob, error) {
 	var jobs []BackupJob

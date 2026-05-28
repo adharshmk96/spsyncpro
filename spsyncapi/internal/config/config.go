@@ -21,6 +21,14 @@ type Config struct {
 	DB              DBConfig
 	Auth            AuthConfig
 	Encryption      EncryptionConfig
+	Temporal        TemporalConfig
+}
+
+// TemporalConfig holds Temporal client and worker settings.
+type TemporalConfig struct {
+	HostPort  string
+	Namespace string
+	TaskQueue string
 }
 
 // DBConfig holds database connection settings.
@@ -82,6 +90,11 @@ func Load() (*Config, error) {
 		Encryption: EncryptionConfig{
 			Secret: viper.GetString("encryption.secret"),
 		},
+		Temporal: TemporalConfig{
+			HostPort:  viper.GetString("temporal.host_port"),
+			Namespace: viper.GetString("temporal.namespace"),
+			TaskQueue: viper.GetString("temporal.task_queue"),
+		},
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -109,6 +122,9 @@ func setDefaults() {
 	viper.SetDefault("auth.access_token_ttl", 15*time.Minute)
 	viper.SetDefault("auth.session_ttl", 30*24*time.Hour)
 	viper.SetDefault("auth.password_reset_ttl", 30*time.Minute)
+	viper.SetDefault("temporal.host_port", "localhost:7233")
+	viper.SetDefault("temporal.namespace", "default")
+	viper.SetDefault("temporal.task_queue", "spsync-transfer")
 }
 
 func (e *EncryptionConfig) validate() error {
@@ -157,6 +173,23 @@ func (c *Config) validate() error {
 		return err
 	}
 
+	if err := c.Temporal.validate(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (t *TemporalConfig) validate() error {
+	if strings.TrimSpace(t.HostPort) == "" {
+		return fmt.Errorf("temporal.host_port must not be empty")
+	}
+	if strings.TrimSpace(t.Namespace) == "" {
+		return fmt.Errorf("temporal.namespace must not be empty")
+	}
+	if strings.TrimSpace(t.TaskQueue) == "" {
+		return fmt.Errorf("temporal.task_queue must not be empty")
+	}
 	return nil
 }
 

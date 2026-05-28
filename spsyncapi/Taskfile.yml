@@ -14,6 +14,7 @@ tasks:
   run:
     desc: Start the API server
     cmds:
+      - docker compose up -d
       - SPSYNCAPI_METRICS_ENABLED=false SPSYNCAPI_LOG_LEVEL=debug go run . serve
 
   test:
@@ -41,3 +42,13 @@ tasks:
     desc: Tidy Go module dependencies
     cmds:
       - go mod tidy
+
+  temporal:up:
+    desc: Start Temporal server and UI via docker compose
+    cmds:
+      - docker compose up -d temporal temporal-ui
+
+  worker:
+    desc: Start the Temporal worker
+    cmds:
+      - go run . worker

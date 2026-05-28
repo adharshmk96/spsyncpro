@@ -28,3 +28,8 @@ auth:
 
 encryption:
   secret: change-me-encryption-key-in-production
+
+temporal:
+  host_port: localhost:7233
+  namespace: default
+  task_queue: spsync-transfer
