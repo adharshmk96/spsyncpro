@@ -69,6 +69,26 @@ definitions:
       one_time:
         type: string
     type: object
+  backuprun.FileTransferDetails:
+    properties:
+      end_at:
+        type: string
+      file_path:
+        type: string
+      start_at:
+        type: string
+    type: object
+  backuprun.RunDetails:
+    properties:
+      end_at:
+        type: string
+      id:
+        type: string
+      job_id:
+        type: string
+      start_at:
+        type: string
+    type: object
   bucketstore.BucketStoreDetails:
     properties:
       bucket_name:
@@ -81,6 +101,15 @@ definitions:
         type: string
       updated_at:
         type: string
+    type: object
+  handlers.Pagination:
+    properties:
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
     type: object
   handlers.backupJobConfigRequest:
     properties:
@@ -136,6 +165,26 @@ definitions:
         type: integer
       one_time:
         type: string
+    type: object
+  handlers.backupRunGetResponse:
+    properties:
+      backup_run:
+        $ref: '#/definitions/backuprun.RunDetails'
+      file_transfers:
+        items:
+          $ref: '#/definitions/backuprun.FileTransferDetails'
+        type: array
+      pagination:
+        $ref: '#/definitions/handlers.Pagination'
+    type: object
+  handlers.backupRunListResponse:
+    properties:
+      backup_runs:
+        items:
+          $ref: '#/definitions/backuprun.RunDetails'
+        type: array
+      pagination:
+        $ref: '#/definitions/handlers.Pagination'
     type: object
   handlers.bucketStoreListResponse:
     properties:
@@ -278,6 +327,26 @@ definitions:
     - password
     - token
     type: object
+  handlers.restoreRunGetResponse:
+    properties:
+      file_transfers:
+        items:
+          $ref: '#/definitions/restorerun.FileTransferDetails'
+        type: array
+      pagination:
+        $ref: '#/definitions/handlers.Pagination'
+      restore_run:
+        $ref: '#/definitions/restorerun.RunDetails'
+    type: object
+  handlers.restoreRunListResponse:
+    properties:
+      pagination:
+        $ref: '#/definitions/handlers.Pagination'
+      restore_runs:
+        items:
+          $ref: '#/definitions/restorerun.RunDetails'
+        type: array
+    type: object
   handlers.successResponse:
     properties:
       success:
@@ -350,6 +419,26 @@ definitions:
       tenant_id:
         type: string
       updated_at:
+        type: string
+    type: object
+  restorerun.FileTransferDetails:
+    properties:
+      end_at:
+        type: string
+      file_path:
+        type: string
+      start_at:
+        type: string
+    type: object
+  restorerun.RunDetails:
+    properties:
+      end_at:
+        type: string
+      id:
+        type: string
+      job_id:
+        type: string
+      start_at:
         type: string
     type: object
 host: localhost:8080
@@ -526,6 +615,95 @@ paths:
       summary: Update backup job
       tags:
       - backup-jobs
+  /backup-runs:
+    get:
+      description: Returns paginated backup runs; optional job_id filter
+      parameters:
+      - description: Filter by backup job ID
+        in: query
+        name: job_id
+        type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.backupRunListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: List backup runs
+      tags:
+      - backup-runs
+  /backup-runs/{id}:
+    get:
+      description: Returns a backup run and paginated file transfers
+      parameters:
+      - description: Backup run ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: File transfers page (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: File transfers page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.backupRunGetResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get backup run
+      tags:
+      - backup-runs
   /bucket-stores:
     get:
       description: Returns all active bucket stores (config is never included)
@@ -1105,6 +1283,95 @@ paths:
       summary: Reset password
       tags:
       - auth
+  /restore-runs:
+    get:
+      description: Returns paginated restore runs; optional job_id filter
+      parameters:
+      - description: Filter by restore job ID
+        in: query
+        name: job_id
+        type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.restoreRunListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: List restore runs
+      tags:
+      - restore-runs
+  /restore-runs/{id}:
+    get:
+      description: Returns a restore run and paginated file transfers
+      parameters:
+      - description: Restore run ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: File transfers page (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: File transfers page size (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.restoreRunGetResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.errorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get restore run
+      tags:
+      - restore-runs
 securityDefinitions:
   BearerAuth:
     description: 'JWT access token. Example: Bearer {token}'

@@ -108,3 +108,60 @@ type BackupJob struct {
 	CreatedAt time.Time `gorm:"not null"`
 	UpdatedAt time.Time `gorm:"not null"`
 }
+
+// BackupRun records a single execution of a backup job.
+type BackupRun struct {
+	ID        string     `gorm:"primaryKey;type:text"`
+	JobID     string     `gorm:"column:job_id;not null;index;type:text"`
+	MemberID  string     `gorm:"column:member_id;not null;index;type:text"`
+	StartAt   *time.Time `gorm:"column:start_at;type:datetime"`
+	EndAt     *time.Time `gorm:"column:end_at;type:datetime"`
+	CreatedAt time.Time  `gorm:"not null;index"`
+}
+
+// BackupRunFileTransfer records one file transferred during a backup run.
+type BackupRunFileTransfer struct {
+	ID        string     `gorm:"primaryKey;type:text"`
+	RunID     string     `gorm:"column:run_id;not null;index;type:text"`
+	FilePath  string     `gorm:"column:file_path;not null;type:text"`
+	StartAt   *time.Time `gorm:"column:start_at;type:datetime"`
+	EndAt     *time.Time `gorm:"column:end_at;type:datetime"`
+	CreatedAt time.Time  `gorm:"not null"`
+}
+
+// RestoreJob defines a restore configuration (minimal model for run ownership).
+type RestoreJob struct {
+	ID       string `gorm:"primaryKey;type:text"`
+	MemberID string `gorm:"column:member_id;not null;index;type:text"`
+
+	StartAt  *time.Time `gorm:"column:start_at;type:datetime"`
+	LastRun  *time.Time `gorm:"column:last_run;type:datetime"`
+	Active   bool       `gorm:"not null;default:true;index"`
+
+	OrganizationID string `gorm:"column:organization_id;not null;type:text;index"`
+	BucketStoreID  string `gorm:"column:bucket_store_id;not null;type:text;index"`
+	SharePointSite string `gorm:"column:share_point_site;not null;type:text"`
+
+	CreatedAt time.Time `gorm:"not null"`
+	UpdatedAt time.Time `gorm:"not null"`
+}
+
+// RestoreRun records a single execution of a restore job.
+type RestoreRun struct {
+	ID        string     `gorm:"primaryKey;type:text"`
+	JobID     string     `gorm:"column:job_id;not null;index;type:text"`
+	MemberID  string     `gorm:"column:member_id;not null;index;type:text"`
+	StartAt   *time.Time `gorm:"column:start_at;type:datetime"`
+	EndAt     *time.Time `gorm:"column:end_at;type:datetime"`
+	CreatedAt time.Time  `gorm:"not null;index"`
+}
+
+// RestoreRunFileTransfer records one file transferred during a restore run.
+type RestoreRunFileTransfer struct {
+	ID        string     `gorm:"primaryKey;type:text"`
+	RunID     string     `gorm:"column:run_id;not null;index;type:text"`
+	FilePath  string     `gorm:"column:file_path;not null;type:text"`
+	StartAt   *time.Time `gorm:"column:start_at;type:datetime"`
+	EndAt     *time.Time `gorm:"column:end_at;type:datetime"`
+	CreatedAt time.Time  `gorm:"not null"`
+}

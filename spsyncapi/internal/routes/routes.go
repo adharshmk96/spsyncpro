@@ -19,6 +19,8 @@ type Deps struct {
 	OrganizationHandler *handlers.OrganizationHandler
 	BucketStoreHandler  *handlers.BucketStoreHandler
 	BackupJobHandler    *handlers.BackupJobHandler
+	BackupRunHandler    *handlers.BackupRunHandler
+	RestoreRunHandler   *handlers.RestoreRunHandler
 	AuthService         *auth.Service
 	JWTConfig           auth.JWTConfig
 	Logger              *slog.Logger
@@ -65,6 +67,12 @@ func Register(router *gin.Engine, deps Deps) {
 			protected.GET("/backup-jobs/:id", deps.BackupJobHandler.Get)
 			protected.PUT("/backup-jobs/:id", deps.BackupJobHandler.Update)
 			protected.DELETE("/backup-jobs/:id", deps.BackupJobHandler.Delete)
+
+			protected.GET("/backup-runs", deps.BackupRunHandler.List)
+			protected.GET("/backup-runs/:id", deps.BackupRunHandler.Get)
+
+			protected.GET("/restore-runs", deps.RestoreRunHandler.List)
+			protected.GET("/restore-runs/:id", deps.RestoreRunHandler.Get)
 		}
 	}
 }

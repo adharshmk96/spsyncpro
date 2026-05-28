@@ -9,12 +9,14 @@ import (
 
 	"spsyncapi/internal/auth"
 	"spsyncapi/internal/backupjob"
+	"spsyncapi/internal/backuprun"
 	"spsyncapi/internal/bucketstore"
 	"spsyncapi/internal/config"
 	"spsyncapi/internal/crypto"
 	"spsyncapi/internal/handlers"
 	"spsyncapi/internal/middleware"
 	"spsyncapi/internal/organization"
+	"spsyncapi/internal/restorerun"
 	"spsyncapi/internal/routes"
 	"spsyncapi/internal/storage"
 	"spsyncapi/internal/telemetry"
@@ -52,6 +54,9 @@ func New(cfg *config.Config, logger *slog.Logger, metrics *telemetry.HTTPMetrics
 	orgRepo := storage.NewOrganizationRepository(db)
 	bucketStoreRepo := storage.NewBucketStoreRepository(db)
 	backupJobRepo := storage.NewBackupJobRepository(db)
+	backupRunRepo := storage.NewBackupRunRepository(db)
+	restoreJobRepo := storage.NewRestoreJobRepository(db)
+	restoreRunRepo := storage.NewRestoreRunRepository(db)
 
 	// --- JWT config --------------------------------------------------------
 	jwtCfg := auth.JWTConfig{
@@ -107,6 +112,24 @@ func New(cfg *config.Config, logger *slog.Logger, metrics *telemetry.HTTPMetrics
 		return nil, fmt.Errorf("create backup job service: %w", err)
 	}
 
+	backupRunSvc, err := backuprun.NewService(backuprun.ServiceConfig{
+		RunRepo: backupRunRepo,
+		JobRepo: backupJobRepo,
+		Logger:  logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create backup run service: %w", err)
+	}
+
+	restoreRunSvc, err := restorerun.NewService(restorerun.ServiceConfig{
+		RunRepo: restoreRunRepo,
+		JobRepo: restoreJobRepo,
+		Logger:  logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create restore run service: %w", err)
+	}
+
 	// --- gin engine --------------------------------------------------------
 	gin.SetMode(cfg.GinMode)
 
@@ -119,6 +142,8 @@ func New(cfg *config.Config, logger *slog.Logger, metrics *telemetry.HTTPMetrics
 		OrganizationHandler: handlers.NewOrganizationHandler(orgSvc, logger),
 		BucketStoreHandler:  handlers.NewBucketStoreHandler(bucketStoreSvc, logger),
 		BackupJobHandler:    handlers.NewBackupJobHandler(backupJobSvc, logger),
+		BackupRunHandler:    handlers.NewBackupRunHandler(backupRunSvc, logger),
+		RestoreRunHandler:   handlers.NewRestoreRunHandler(restoreRunSvc, logger),
 		AuthService:         authSvc,
 		JWTConfig:           jwtCfg,
 		Logger:              logger,

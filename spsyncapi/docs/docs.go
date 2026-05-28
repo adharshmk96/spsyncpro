@@ -277,6 +277,145 @@ const docTemplate = `{
                 }
             }
         },
+        "/backup-runs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns paginated backup runs; optional job_id filter",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup-runs"
+                ],
+                "summary": "List backup runs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by backup job ID",
+                        "name": "job_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 20, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.backupRunListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/backup-runs/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a backup run and paginated file transfers",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "backup-runs"
+                ],
+                "summary": "Get backup run",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Backup run ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "File transfers page (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "File transfers page size (default 20, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.backupRunGetResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/bucket-stores": {
             "get": {
                 "security": [
@@ -1177,6 +1316,145 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/restore-runs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns paginated restore runs; optional job_id filter",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "restore-runs"
+                ],
+                "summary": "List restore runs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by restore job ID",
+                        "name": "job_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 20, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.restoreRunListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/restore-runs/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Returns a restore run and paginated file transfers",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "restore-runs"
+                ],
+                "summary": "Get restore run",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Restore run ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "File transfers page (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "File transfers page size (default 20, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.restoreRunGetResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.errorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -1286,6 +1564,37 @@ const docTemplate = `{
                 }
             }
         },
+        "backuprun.FileTransferDetails": {
+            "type": "object",
+            "properties": {
+                "end_at": {
+                    "type": "string"
+                },
+                "file_path": {
+                    "type": "string"
+                },
+                "start_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "backuprun.RunDetails": {
+            "type": "object",
+            "properties": {
+                "end_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "job_id": {
+                    "type": "string"
+                },
+                "start_at": {
+                    "type": "string"
+                }
+            }
+        },
         "bucketstore.BucketStoreDetails": {
             "type": "object",
             "properties": {
@@ -1303,6 +1612,20 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "handlers.Pagination": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },
@@ -1387,6 +1710,37 @@ const docTemplate = `{
                 },
                 "one_time": {
                     "type": "string"
+                }
+            }
+        },
+        "handlers.backupRunGetResponse": {
+            "type": "object",
+            "properties": {
+                "backup_run": {
+                    "$ref": "#/definitions/backuprun.RunDetails"
+                },
+                "file_transfers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backuprun.FileTransferDetails"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/handlers.Pagination"
+                }
+            }
+        },
+        "handlers.backupRunListResponse": {
+            "type": "object",
+            "properties": {
+                "backup_runs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/backuprun.RunDetails"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/handlers.Pagination"
                 }
             }
         },
@@ -1603,6 +1957,37 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.restoreRunGetResponse": {
+            "type": "object",
+            "properties": {
+                "file_transfers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/restorerun.FileTransferDetails"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/handlers.Pagination"
+                },
+                "restore_run": {
+                    "$ref": "#/definitions/restorerun.RunDetails"
+                }
+            }
+        },
+        "handlers.restoreRunListResponse": {
+            "type": "object",
+            "properties": {
+                "pagination": {
+                    "$ref": "#/definitions/handlers.Pagination"
+                },
+                "restore_runs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/restorerun.RunDetails"
+                    }
+                }
+            }
+        },
         "handlers.successResponse": {
             "type": "object",
             "properties": {
@@ -1711,6 +2096,37 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "restorerun.FileTransferDetails": {
+            "type": "object",
+            "properties": {
+                "end_at": {
+                    "type": "string"
+                },
+                "file_path": {
+                    "type": "string"
+                },
+                "start_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "restorerun.RunDetails": {
+            "type": "object",
+            "properties": {
+                "end_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "job_id": {
+                    "type": "string"
+                },
+                "start_at": {
                     "type": "string"
                 }
             }
