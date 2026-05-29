@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"spsyncapi/internal/config"
+	"spsyncapi/internal/crypto"
 	"spsyncapi/internal/storage"
 	"spsyncapi/internal/temporal"
 
@@ -40,10 +41,17 @@ var workerCmd = &cobra.Command{
 		}
 		defer temporalClient.Close()
 
+		encryptor, err := crypto.NewSecretEncryptor(cfg.Encryption.Secret)
+		if err != nil {
+			return fmt.Errorf("encryption: %w", err)
+		}
+
 		backupJobRepo := storage.NewBackupJobRepository(db)
 		backupRunRepo := storage.NewBackupRunRepository(db)
 		restoreJobRepo := storage.NewRestoreJobRepository(db)
 		restoreRunRepo := storage.NewRestoreRunRepository(db)
+		orgRepo := storage.NewOrganizationRepository(db)
+		bucketStoreRepo := storage.NewBucketStoreRepository(db)
 
 		scheduler := temporal.NewScheduleOrchestrator(temporalClient, cfg.Temporal, logger)
 		executor := temporal.NewRunExecutor(temporalClient, cfg.Temporal)
@@ -67,11 +75,14 @@ var workerCmd = &cobra.Command{
 		reconcileCancel()
 
 		acts := &temporal.Activities{
-			BackupRunRepo:  backupRunRepo,
-			RestoreRunRepo: restoreRunRepo,
-			BackupJobRepo:  backupJobRepo,
-			RestoreJobRepo: restoreJobRepo,
-			Logger:         logger,
+			BackupRunRepo:   backupRunRepo,
+			RestoreRunRepo:  restoreRunRepo,
+			BackupJobRepo:   backupJobRepo,
+			RestoreJobRepo:  restoreJobRepo,
+			OrgRepo:         orgRepo,
+			BucketStoreRepo: bucketStoreRepo,
+			Encryptor:       encryptor,
+			Logger:          logger,
 		}
 		w := temporal.NewWorker(temporalClient, cfg.Temporal, acts, logger)
 

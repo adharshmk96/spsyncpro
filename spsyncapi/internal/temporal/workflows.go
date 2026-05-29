@@ -7,8 +7,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-const transferActivityName = "TransferFiles"
-
 // BackupRunWorkflow orchestrates a single backup run (manual, scheduled, or resumed).
 func BackupRunWorkflow(ctx workflow.Context, in RunWorkflowInput) error {
 	return runTransferWorkflow(ctx, in)
@@ -66,8 +64,15 @@ func runTransferWorkflow(ctx workflow.Context, in RunWorkflowInput) error {
 		}
 	}
 
-	transferCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 10 * time.Minute,
+	runInput := FinalizeRunInput{
+		RunID:    in.RunID,
+		JobID:    in.JobID,
+		MemberID: in.MemberID,
+		Kind:     in.Kind,
+	}
+
+	fetchCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
 		HeartbeatTimeout:    30 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: time.Second,
@@ -75,10 +80,48 @@ func runTransferWorkflow(ctx workflow.Context, in RunWorkflowInput) error {
 		},
 	})
 
-	return workflow.ExecuteActivity(transferCtx, transferActivityName, TransferFilesInput{
+	var meta FetchFileMetadataOutput
+	if err := workflow.ExecuteActivity(fetchCtx, fetchFileMetadataActivityName, FetchFileMetadataInput{
 		RunID:    in.RunID,
 		JobID:    in.JobID,
 		MemberID: in.MemberID,
 		Kind:     in.Kind,
-	}).Get(ctx, nil)
+	}).Get(ctx, &meta); err != nil {
+		return err
+	}
+
+	transferCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 45 * time.Second,
+		HeartbeatTimeout:    15 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: time.Second,
+			MaximumAttempts: 3,
+		},
+	})
+
+	futures := make([]workflow.Future, len(meta.Paths))
+	for i, path := range meta.Paths {
+		futures[i] = workflow.ExecuteActivity(transferCtx, transferSingleFileActivityName, TransferSingleFileInput{
+			RunID:    in.RunID,
+			JobID:    in.JobID,
+			MemberID: in.MemberID,
+			Kind:     in.Kind,
+			FilePath: path,
+		})
+	}
+	for _, f := range futures {
+		if err := f.Get(ctx, nil); err != nil {
+			return err
+		}
+	}
+
+	finalizeCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: time.Second,
+			MaximumAttempts: 3,
+		},
+	})
+
+	return workflow.ExecuteActivity(finalizeCtx, finalizeRunActivityName, runInput).Get(ctx, nil)
 }

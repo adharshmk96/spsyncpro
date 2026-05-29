@@ -23,8 +23,30 @@ type ScheduledBackupInput struct {
 	MemberID string `json:"member_id"`
 }
 
-// TransferFilesInput is the activity payload for dummy file transfers.
-type TransferFilesInput struct {
+// FetchFileMetadataInput is the activity payload for listing files to transfer.
+type FetchFileMetadataInput struct {
+	RunID    string  `json:"run_id"`
+	JobID    string  `json:"job_id"`
+	MemberID string  `json:"member_id"`
+	Kind     RunKind `json:"kind"`
+}
+
+// FetchFileMetadataOutput holds file paths discovered for a run.
+type FetchFileMetadataOutput struct {
+	Paths []string `json:"paths"`
+}
+
+// TransferSingleFileInput is the activity payload for one file transfer.
+type TransferSingleFileInput struct {
+	RunID    string  `json:"run_id"`
+	JobID    string  `json:"job_id"`
+	MemberID string  `json:"member_id"`
+	Kind     RunKind `json:"kind"`
+	FilePath string  `json:"file_path"`
+}
+
+// FinalizeRunInput is the activity payload for completing a run.
+type FinalizeRunInput struct {
 	RunID    string  `json:"run_id"`
 	JobID    string  `json:"job_id"`
 	MemberID string  `json:"member_id"`
