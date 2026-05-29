@@ -231,6 +231,11 @@ func (s *Service) Create(in CreateInput) (*BackupJobDetails, error) {
 		if err := s.runStarter.StartRun(ctx, in.MemberID, job.ID); err != nil {
 			return nil, fmt.Errorf("start immediate backup run: %w", err)
 		}
+		reloaded, err := s.repo.FindActiveByID(job.ID, in.MemberID)
+		if err != nil {
+			return nil, fmt.Errorf("reload backup job after immediate run: %w", err)
+		}
+		job = reloaded
 	case isScheduledOneTime(normalized.Schedule):
 		if err := s.scheduleSyncer.DeleteJobSchedule(ctx, job.ID); err != nil {
 			return nil, fmt.Errorf("clear backup job schedule: %w", err)
@@ -545,6 +550,11 @@ func normalizeCSV(value string) string {
 		out = append(out, strings.TrimSpace(part))
 	}
 	return strings.Join(out, ",")
+}
+
+// DetailsFromStorage maps a persisted backup job row to API details.
+func DetailsFromStorage(job *storage.BackupJob) *BackupJobDetails {
+	return toDetails(job)
 }
 
 func toDetails(job *storage.BackupJob) *BackupJobDetails {

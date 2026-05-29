@@ -21,6 +21,7 @@ import {
 import type {
   BackupJob,
   BackupJobResponse,
+  BackupRunStartResponse,
   BackupRunsResponse,
   RunDetails,
 } from "@/lib/api/types";
@@ -91,9 +92,15 @@ export default function DashboardBackupJobDetailPage() {
     setIsRunning(true);
     setErrorMessage(null);
     try {
-      await clientApiFetch(`/backup-jobs/${jobId}/runs`, { method: "POST" });
-      const jobData = await clientApiFetch<BackupJobResponse>(`/backup-jobs/${jobId}`);
-      setJob(jobData.backup_job);
+      const start = await clientApiFetch<BackupRunStartResponse>(`/backup-jobs/${jobId}/runs`, {
+        method: "POST",
+      });
+      if (start.backup_job) {
+        setJob(start.backup_job);
+      } else {
+        const jobData = await clientApiFetch<BackupJobResponse>(`/backup-jobs/${jobId}`);
+        setJob(jobData.backup_job);
+      }
       setRuns(await fetchRuns());
     } catch (error) {
       console.error("Failed to start backup run.", error);

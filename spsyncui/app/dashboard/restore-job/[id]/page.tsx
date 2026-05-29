@@ -13,6 +13,7 @@ import { deriveRunStatus, formatDateTime, formatRunStatus } from "@/lib/api/form
 import type {
   RestoreJob,
   RestoreJobResponse,
+  RestoreRunStartResponse,
   RestoreRunsResponse,
   RunDetails,
 } from "@/lib/api/types";
@@ -83,7 +84,15 @@ export default function DashboardRestoreJobDetailPage() {
     setIsRunning(true);
     setErrorMessage(null);
     try {
-      await clientApiFetch(`/restore-jobs/${jobId}/runs`, { method: "POST" });
+      const start = await clientApiFetch<RestoreRunStartResponse>(`/restore-jobs/${jobId}/runs`, {
+        method: "POST",
+      });
+      if (start.restore_job) {
+        setJob(start.restore_job);
+      } else {
+        const jobData = await clientApiFetch<RestoreJobResponse>(`/restore-jobs/${jobId}`);
+        setJob(jobData.restore_job);
+      }
       setRuns(await fetchRuns());
     } catch (error) {
       console.error("Failed to start restore run.", error);

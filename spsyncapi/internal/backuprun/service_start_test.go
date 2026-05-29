@@ -45,28 +45,39 @@ func TestStartAndStopRun(t *testing.T) {
 	}
 
 	jobID := seedBackupJob(t, jobRepo)
-	details, err := svcWithExec.StartRun(context.Background(), testMemberA, jobID)
+	result, err := svcWithExec.StartRun(context.Background(), testMemberA, jobID)
 	if err != nil {
 		t.Fatalf("StartRun: %v", err)
 	}
-	if len(exec.started) != 1 || exec.started[0].RunID != details.ID {
+	if len(exec.started) != 1 || exec.started[0].RunID != result.Run.ID {
 		t.Fatalf("executor started: %+v", exec.started)
 	}
+	if result.Job.LastRun == nil {
+		t.Fatal("expected job last_run after StartRun")
+	}
 
-	_, err = svcWithExec.StopRun(context.Background(), testMemberA, details.ID)
+	job, err := jobRepo.FindActiveByID(jobID, testMemberA)
+	if err != nil {
+		t.Fatalf("find job: %v", err)
+	}
+	if job.LastRun == nil {
+		t.Fatal("expected persisted last_run after StartRun")
+	}
+
+	_, err = svcWithExec.StopRun(context.Background(), testMemberA, result.Run.ID)
 	if err != nil {
 		t.Fatalf("StopRun: %v", err)
 	}
-	if len(exec.stopped) != 1 || exec.stopped[0] != details.ID {
+	if len(exec.stopped) != 1 || exec.stopped[0] != result.Run.ID {
 		t.Fatalf("executor stopped: %+v", exec.stopped)
 	}
 
 	// Mark complete and stop should conflict.
 	now := time.Now().UTC()
-	run, _ := runRepo.FindByID(details.ID, testMemberA)
+	run, _ := runRepo.FindByID(result.Run.ID, testMemberA)
 	run.EndAt = &now
 	_ = runRepo.Update(run)
-	_, err = svcWithExec.StopRun(context.Background(), testMemberA, details.ID)
+	_, err = svcWithExec.StopRun(context.Background(), testMemberA, result.Run.ID)
 	if err == nil {
 		t.Fatal("expected error stopping completed run")
 	}

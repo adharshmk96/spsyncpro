@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"spsyncapi/internal/restorejob"
 	"spsyncapi/internal/restorerun"
 
 	"github.com/gin-gonic/gin"
@@ -144,12 +145,12 @@ func (h *RestoreRunHandler) StartForJob(c *gin.Context) {
 		return
 	}
 
-	details, err := h.svc.StartRun(c.Request.Context(), memberID, c.Param("id"))
+	result, err := h.svc.StartRun(c.Request.Context(), memberID, c.Param("id"))
 	if err != nil {
 		h.handleRestoreRunError(c, err)
 		return
 	}
-	c.JSON(http.StatusCreated, restoreRunStartResponse{RestoreRun: *details})
+	c.JSON(http.StatusCreated, restoreRunStartResponse{RestoreRun: result.Run, RestoreJob: &result.Job})
 }
 
 // Stop cancels an in-progress restore run.
@@ -182,7 +183,8 @@ func (h *RestoreRunHandler) Stop(c *gin.Context) {
 }
 
 type restoreRunStartResponse struct {
-	RestoreRun restorerun.RunDetails `json:"restore_run"`
+	RestoreRun restorerun.RunDetails            `json:"restore_run"`
+	RestoreJob *restorejob.RestoreJobDetails    `json:"restore_job,omitempty"`
 }
 
 func (h *RestoreRunHandler) handleRestoreRunError(c *gin.Context, err error) {

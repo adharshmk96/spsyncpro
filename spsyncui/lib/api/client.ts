@@ -16,6 +16,7 @@ export async function clientApiFetch<T>(path: string, init?: RequestInit): Promi
     ...init,
     headers,
     credentials: "same-origin",
+    cache: "no-store",
   });
 
   const raw = await response.text();

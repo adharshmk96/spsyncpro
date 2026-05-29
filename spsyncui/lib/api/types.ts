@@ -209,7 +209,10 @@ export type BackupRunResponse = {
   pagination: Pagination;
 };
 
-export type BackupRunStartResponse = { backup_run: RunDetails };
+export type BackupRunStartResponse = {
+  backup_run: RunDetails;
+  backup_job?: BackupJob;
+};
 
 export type RestoreRunsResponse = {
   restore_runs: RunDetails[];
@@ -222,7 +225,10 @@ export type RestoreRunResponse = {
   pagination: Pagination;
 };
 
-export type RestoreRunStartResponse = { restore_run: RunDetails };
+export type RestoreRunStartResponse = {
+  restore_run: RunDetails;
+  restore_job?: RestoreJob;
+};
 
 /** Run status is derived client-side from start_at / end_at (no API field). */
 export type DerivedRunStatus = "pending" | "running" | "completed";

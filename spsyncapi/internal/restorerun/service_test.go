@@ -175,8 +175,12 @@ func TestStartRunSetsJobLastRun(t *testing.T) {
 	}
 
 	before := time.Now().UTC()
-	if _, err := svc.StartRun(context.Background(), testMemberA, jobID); err != nil {
+	result, err := svc.StartRun(context.Background(), testMemberA, jobID)
+	if err != nil {
 		t.Fatalf("start run: %v", err)
+	}
+	if result.Job.LastRun == nil {
+		t.Fatal("expected job last_run in StartRun result")
 	}
 
 	job, err := jobRepo.FindActiveByID(jobID, testMemberA)

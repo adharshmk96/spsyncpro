@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"spsyncapi/internal/backupjob"
 	"spsyncapi/internal/backuprun"
 
 	"github.com/gin-gonic/gin"
@@ -144,12 +145,12 @@ func (h *BackupRunHandler) StartForJob(c *gin.Context) {
 		return
 	}
 
-	details, err := h.svc.StartRun(c.Request.Context(), memberID, c.Param("id"))
+	result, err := h.svc.StartRun(c.Request.Context(), memberID, c.Param("id"))
 	if err != nil {
 		h.handleBackupRunError(c, err)
 		return
 	}
-	c.JSON(http.StatusCreated, backupRunStartResponse{BackupRun: *details})
+	c.JSON(http.StatusCreated, backupRunStartResponse{BackupRun: result.Run, BackupJob: &result.Job})
 }
 
 // Stop cancels an in-progress backup run.
@@ -182,7 +183,8 @@ func (h *BackupRunHandler) Stop(c *gin.Context) {
 }
 
 type backupRunStartResponse struct {
-	BackupRun backuprun.RunDetails `json:"backup_run"`
+	BackupRun backuprun.RunDetails        `json:"backup_run"`
+	BackupJob *backupjob.BackupJobDetails `json:"backup_job,omitempty"`
 }
 
 func (h *BackupRunHandler) handleBackupRunError(c *gin.Context, err error) {

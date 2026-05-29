@@ -302,6 +302,11 @@ func normalizeAndValidateUpdate(in UpdateInput) (UpdateInput, error) {
 	return out, nil
 }
 
+// DetailsFromStorage maps a persisted restore job row to API details.
+func DetailsFromStorage(job *storage.RestoreJob) *RestoreJobDetails {
+	return toDetails(job)
+}
+
 func toDetails(job *storage.RestoreJob) *RestoreJobDetails {
 	return &RestoreJobDetails{
 		ID:      job.ID,

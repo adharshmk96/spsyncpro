@@ -57,6 +57,12 @@ type GetResult struct {
 	FilesTotal    int64
 }
 
+// StartRunResult is returned when a restore run is started for a job.
+type StartRunResult struct {
+	Run RunDetails
+	Job restorejob.RestoreJobDetails
+}
+
 type Service struct {
 	runRepo  *storage.RestoreRunRepository
 	jobRepo  *storage.RestoreJobRepository
@@ -90,7 +96,7 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 }
 
 // StartRun creates a restore run and starts its Temporal workflow.
-func (s *Service) StartRun(ctx context.Context, memberID, jobID string) (*RunDetails, error) {
+func (s *Service) StartRun(ctx context.Context, memberID, jobID string) (*StartRunResult, error) {
 	if strings.TrimSpace(memberID) == "" {
 		return nil, ErrInvalidMemberID
 	}
@@ -115,6 +121,9 @@ func (s *Service) StartRun(ctx context.Context, memberID, jobID string) (*RunDet
 	if s.executor == nil {
 		return nil, fmt.Errorf("restore run service: run executor not configured")
 	}
+	if err := s.markRunStarted(jobID, memberID, now); err != nil {
+		return nil, err
+	}
 	if err := s.executor.StartRestoreRun(ctx, temporal.RunWorkflowInput{
 		RunID:    run.ID,
 		JobID:    jobID,
@@ -123,12 +132,15 @@ func (s *Service) StartRun(ctx context.Context, memberID, jobID string) (*RunDet
 	}); err != nil {
 		return nil, fmt.Errorf("restore run service: start workflow: %w", err)
 	}
-	if err := s.markRunStarted(jobID, memberID, now); err != nil {
-		return nil, err
-	}
 
-	details := toRunDetails(run)
-	return &details, nil
+	job, err := s.jobRepo.FindActiveByID(jobID, memberID)
+	if err != nil {
+		return nil, fmt.Errorf("restore run service: reload job: %w", err)
+	}
+	return &StartRunResult{
+		Run: toRunDetails(run),
+		Job: *restorejob.DetailsFromStorage(job),
+	}, nil
 }
 
 // StartRunAt creates a restore run and starts its workflow at the given time.
