@@ -193,6 +193,37 @@ func TestCreateScheduleValidation(t *testing.T) {
 	}
 }
 
+func TestCreateWithoutDocumentLibraries(t *testing.T) {
+	env := newTestBackupJobEnv(t)
+	interval := int64(3600)
+
+	created, err := env.svc.Create(backupjob.CreateInput{
+		MemberID: testMemberA,
+		Active:   true,
+		Schedule: backupjob.ScheduleInput{
+			Type:            "recurring",
+			IntervalSeconds: &interval,
+		},
+		JobConfig: backupjob.JobConfigInput{
+			OrganizationID: env.orgID,
+			BucketStoreID:  env.bucketID,
+			SharePointSite: "https://tenant.sharepoint.com/sites/demo",
+			Filters:        backupjob.FilterInput{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("create without document libraries: %v", err)
+	}
+
+	got, err := env.svc.Get(testMemberA, created.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.JobConfig.Filters.DocumentLibrariesCSV != "" {
+		t.Fatalf("document libraries: got %q, want empty", got.JobConfig.Filters.DocumentLibrariesCSV)
+	}
+}
+
 func TestUpdateReplacesSchedule(t *testing.T) {
 	env := newTestBackupJobEnv(t)
 	interval := int64(3600)

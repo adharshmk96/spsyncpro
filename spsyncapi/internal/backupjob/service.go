@@ -86,7 +86,7 @@ type ScheduleDetails struct {
 }
 
 type FilterDetails struct {
-	DocumentLibrariesCSV string     `json:"document_libraries"`
+	DocumentLibrariesCSV string     `json:"document_libraries,omitempty"`
 	MinFileSize          *int64     `json:"min_file_size,omitempty"`
 	MaxFileSize          *int64     `json:"max_file_size,omitempty"`
 	CreatedAfter         *time.Time `json:"created_after,omitempty"`

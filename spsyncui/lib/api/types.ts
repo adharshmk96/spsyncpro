@@ -97,7 +97,7 @@ export type ScheduleInput = {
 
 /** Filters as returned by the API (document_libraries is comma-separated). */
 export type BackupFiltersRead = {
-  document_libraries: string;
+  document_libraries?: string;
   min_file_size?: number | null;
   max_file_size?: number | null;
   created_after?: string | null;
@@ -108,7 +108,7 @@ export type BackupFiltersRead = {
 
 /** Filters as sent to the API (document_libraries is an array). */
 export type BackupFiltersInput = {
-  document_libraries: string[];
+  document_libraries?: string[];
   min_file_size?: number | null;
   max_file_size?: number | null;
   created_after?: string | null;

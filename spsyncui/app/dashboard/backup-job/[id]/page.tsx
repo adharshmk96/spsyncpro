@@ -14,6 +14,7 @@ import {
   formatDateTime,
   formatRunStatus,
   formatSchedule,
+  hasOptionalBackupFilters,
   parseDocumentLibraries,
 } from "@/lib/api/format";
 import type {
@@ -186,10 +187,6 @@ export default function DashboardBackupJobDetailPage() {
             <ConfigRow label="Organization" value={orgName} />
             <ConfigRow label="Bucket store" value={bucketName} />
             <ConfigRow label="SharePoint site URL" value={job.job_config.share_point_site} />
-            <ConfigRow
-              label="Document libraries"
-              value={parseDocumentLibraries(filters.document_libraries).join(", ") || "-"}
-            />
             <ConfigRow label="Schedule" value={formatSchedule(job.schedule)} />
             <ConfigRow label="Active" value={job.active ? "Yes" : "No"} />
             {job.start_at ? (
@@ -201,6 +198,38 @@ export default function DashboardBackupJobDetailPage() {
             <ConfigRow label="Updated at" value={formatDateTime(job.updated_at)} />
           </div>
         </Card>
+
+        {hasOptionalBackupFilters(filters) ? (
+          <Card className="p-6">
+            <h2 className="text-lg font-semibold">Filters</h2>
+            <div className="mt-4 space-y-2 text-sm">
+              {parseDocumentLibraries(filters.document_libraries).length > 0 ? (
+                <ConfigRow
+                  label="Document libraries"
+                  value={parseDocumentLibraries(filters.document_libraries).join(", ")}
+                />
+              ) : null}
+              {filters.min_file_size != null ? (
+                <ConfigRow label="Min file size" value={String(filters.min_file_size)} />
+              ) : null}
+              {filters.max_file_size != null ? (
+                <ConfigRow label="Max file size" value={String(filters.max_file_size)} />
+              ) : null}
+              {filters.created_after ? (
+                <ConfigRow label="Created after" value={formatDateTime(filters.created_after)} />
+              ) : null}
+              {filters.created_before ? (
+                <ConfigRow label="Created before" value={formatDateTime(filters.created_before)} />
+              ) : null}
+              {filters.updated_after ? (
+                <ConfigRow label="Updated after" value={formatDateTime(filters.updated_after)} />
+              ) : null}
+              {filters.updated_before ? (
+                <ConfigRow label="Updated before" value={formatDateTime(filters.updated_before)} />
+              ) : null}
+            </div>
+          </Card>
+        ) : null}
 
         <Card className="p-6">
           <h2 className="text-lg font-semibold">Run history</h2>

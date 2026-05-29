@@ -29,7 +29,7 @@ type backupJobScheduleRequest struct {
 }
 
 type backupJobFiltersRequest struct {
-	DocumentLibraries []string   `json:"document_libraries"`
+	DocumentLibraries []string   `json:"document_libraries,omitempty"`
 	MinFileSize       *int64     `json:"min_file_size"`
 	MaxFileSize       *int64     `json:"max_file_size"`
 	CreatedAfter      *time.Time `json:"created_after"`

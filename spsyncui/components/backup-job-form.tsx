@@ -73,10 +73,6 @@ export function BackupJobForm({ mode, job }: BackupJobFormProps) {
   const [organization, setOrganization] = useState(job?.job_config.organization ?? "");
   const [bucketStore, setBucketStore] = useState(job?.job_config.bucket_store ?? "");
   const [sharePointSite, setSharePointSite] = useState(job?.job_config.share_point_site ?? "");
-  const [documentLibraries, setDocumentLibraries] = useState(
-    job?.job_config.filters.document_libraries ?? ""
-  );
-
   const [filtersEnabled, setFiltersEnabled] = useState(
     job ? hasOptionalBackupFilters(job.job_config.filters) : false
   );
@@ -97,6 +93,9 @@ export function BackupJobForm({ mode, job }: BackupJobFormProps) {
   );
   const [updatedBefore, setUpdatedBefore] = useState(
     isoToLocalDateTime(job?.job_config.filters.updated_before)
+  );
+  const [documentLibraries, setDocumentLibraries] = useState(
+    job ? parseDocumentLibraries(job.job_config.filters.document_libraries).join(", ") : ""
   );
 
   const [scheduleType, setScheduleType] = useState<ScheduleType>(initialScheduleType(job));
@@ -147,12 +146,6 @@ export function BackupJobForm({ mode, job }: BackupJobFormProps) {
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    const libraries = parseDocumentLibraries(documentLibraries);
-    if (libraries.length === 0) {
-      setErrorMessage("At least one document library is required.");
-      return;
-    }
-
     if (!organization) {
       setErrorMessage("An organization is required.");
       return;
@@ -177,7 +170,9 @@ export function BackupJobForm({ mode, job }: BackupJobFormProps) {
         bucket_store: bucketStore,
         share_point_site: sharePointSite.trim(),
         filters: {
-          document_libraries: libraries,
+          document_libraries: filtersEnabled
+            ? parseDocumentLibraries(documentLibraries)
+            : [],
           min_file_size: filtersEnabled ? toNullableNumber(minFileSize) : null,
           max_file_size: filtersEnabled ? toNullableNumber(maxFileSize) : null,
           created_after: filtersEnabled ? localDateTimeToIso(createdAfter) : null,
@@ -305,16 +300,6 @@ export function BackupJobForm({ mode, job }: BackupJobFormProps) {
               required
             />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="documentLibraries">Document Libraries (comma separated)</Label>
-            <textarea
-              id="documentLibraries"
-              className="min-h-24 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-              value={documentLibraries}
-              onChange={(event) => setDocumentLibraries(event.target.value)}
-              required
-            />
-          </div>
         </section>
 
         <section className="space-y-4">
@@ -421,6 +406,19 @@ export function BackupJobForm({ mode, job }: BackupJobFormProps) {
           </div>
           {filtersEnabled ? (
             <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1.5 md:col-span-2">
+                <Label htmlFor="documentLibraries">Document libraries (comma separated)</Label>
+                <textarea
+                  id="documentLibraries"
+                  className="min-h-24 w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                  value={documentLibraries}
+                  onChange={(event) => setDocumentLibraries(event.target.value)}
+                  placeholder="Shared Documents, Site Assets"
+                />
+                <p className="text-sm text-muted-foreground">
+                  Optional. Leave blank to include all document libraries on the site.
+                </p>
+              </div>
               <div className="space-y-1.5">
                 <Label htmlFor="minFileSize">Min File Size (bytes)</Label>
                 <Input
@@ -480,7 +478,7 @@ export function BackupJobForm({ mode, job }: BackupJobFormProps) {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              Optional file size and date filters are disabled.
+              Optional document library, file size, and date filters are disabled.
             </p>
           )}
         </section>

@@ -13,8 +13,7 @@ tasks:
 
   run:
     desc: Start the API server
-    cmds:
-      - docker compose up -d
+    cmds:      
       - SPSYNCAPI_METRICS_ENABLED=false SPSYNCAPI_LOG_LEVEL=debug go run . serve
 
   test:
