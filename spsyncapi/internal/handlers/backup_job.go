@@ -22,6 +22,7 @@ func NewBackupJobHandler(svc *backupjob.Service, logger *slog.Logger) *BackupJob
 }
 
 type backupJobScheduleRequest struct {
+	Type     string     `json:"type"`
 	Interval *int64     `json:"interval"`
 	Cron     *string    `json:"cron"`
 	OneTime  *time.Time `json:"one_time"`
@@ -254,6 +255,7 @@ func toCreateInput(req createBackupJobRequest) backupjob.CreateInput {
 		EndAt:   req.EndAt,
 		Active:  req.Active,
 		Schedule: backupjob.ScheduleInput{
+			Type:            req.Schedule.Type,
 			IntervalSeconds: req.Schedule.Interval,
 			Cron:            req.Schedule.Cron,
 			OneTime:         req.Schedule.OneTime,

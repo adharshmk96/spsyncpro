@@ -29,14 +29,14 @@ type restoreJobConfigRequest struct {
 type createRestoreJobRequest struct {
 	StartAt   *time.Time              `json:"start_at"`
 	LastRun   *time.Time              `json:"last_run"`
-	Active    bool                    `json:"active"`
+	Active    *bool                   `json:"active"`
 	JobConfig restoreJobConfigRequest `json:"job_config" binding:"required"`
 }
 
 type updateRestoreJobRequest struct {
 	StartAt   *time.Time              `json:"start_at"`
 	LastRun   *time.Time              `json:"last_run"`
-	Active    bool                    `json:"active"`
+	Active    *bool                   `json:"active"`
 	JobConfig restoreJobConfigRequest `json:"job_config" binding:"required"`
 }
 
@@ -198,6 +198,7 @@ func (h *RestoreJobHandler) Delete(c *gin.Context) {
 func (h *RestoreJobHandler) handleRestoreJobError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, restorejob.ErrInvalidStartAt),
+		errors.Is(err, restorejob.ErrInvalidStartAtPast),
 		errors.Is(err, restorejob.ErrInvalidOrganizationID),
 		errors.Is(err, restorejob.ErrInvalidBucketStoreID),
 		errors.Is(err, restorejob.ErrInvalidSharePointSite):
@@ -210,12 +211,19 @@ func (h *RestoreJobHandler) handleRestoreJobError(c *gin.Context, err error) {
 	}
 }
 
+func resolveRestoreActive(active *bool) bool {
+	if active == nil {
+		return true
+	}
+	return *active
+}
+
 func toRestoreCreateInput(memberID string, req createRestoreJobRequest) restorejob.CreateInput {
 	return restorejob.CreateInput{
 		MemberID: memberID,
 		StartAt:  req.StartAt,
 		LastRun:  req.LastRun,
-		Active:   req.Active,
+		Active:   resolveRestoreActive(req.Active),
 		JobConfig: restorejob.JobConfigInput{
 			OrganizationID: req.JobConfig.Organization,
 			BucketStoreID:  req.JobConfig.BucketStore,
@@ -229,7 +237,7 @@ func toRestoreUpdateInput(id string, req updateRestoreJobRequest) restorejob.Upd
 		ID:      id,
 		StartAt: req.StartAt,
 		LastRun: req.LastRun,
-		Active:  req.Active,
+		Active:  resolveRestoreActive(req.Active),
 		JobConfig: restorejob.JobConfigInput{
 			OrganizationID: req.JobConfig.Organization,
 			BucketStoreID:  req.JobConfig.BucketStore,

@@ -1,6 +1,7 @@
 package backupjob_test
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -13,6 +14,8 @@ import (
 	"spsyncapi/internal/crypto"
 	"spsyncapi/internal/organization"
 	"spsyncapi/internal/storage"
+
+	"gorm.io/gorm"
 )
 
 const (
@@ -25,6 +28,8 @@ type testEnv struct {
 	orgSvc   *organization.Service
 	bucketID string
 	orgID    string
+	db       *gorm.DB
+	logger   *slog.Logger
 }
 
 func newTestBackupJobEnv(t *testing.T) testEnv {
@@ -106,6 +111,8 @@ func newTestBackupJobEnv(t *testing.T) testEnv {
 		orgSvc:   orgSvc,
 		orgID:    org.ID,
 		bucketID: bucket.ID,
+		db:       db,
+		logger:   logger,
 	}
 }
 
@@ -263,6 +270,97 @@ func TestMemberIsolation(t *testing.T) {
 	}
 }
 
+func TestCreateImmediateOneTimeStartsRun(t *testing.T) {
+	env := newTestBackupJobEnv(t)
+	starter := &mockRunStarter{}
+	syncer := &mockScheduleSyncer{}
+
+	svc, err := backupjob.NewService(backupjob.ServiceConfig{
+		Repo:           storage.NewBackupJobRepository(env.db),
+		OrgRepo:        storage.NewOrganizationRepository(env.db),
+		BucketRepo:     storage.NewBucketStoreRepository(env.db),
+		ScheduleSyncer: syncer,
+		RunStarter:     starter,
+		Logger:         env.logger,
+	})
+	if err != nil {
+		t.Fatalf("service: %v", err)
+	}
+
+	created, err := svc.Create(backupjob.CreateInput{
+		MemberID: testMemberA,
+		Active:   true,
+		Schedule: backupjob.ScheduleInput{
+			Type: "one_time",
+		},
+		JobConfig: backupjob.JobConfigInput{
+			OrganizationID: env.orgID,
+			BucketStoreID:  env.bucketID,
+			SharePointSite: "https://tenant.sharepoint.com/sites/demo",
+			Filters: backupjob.FilterInput{
+				DocumentLibrariesCSV: "Docs",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if len(starter.jobIDs) != 1 || starter.jobIDs[0] != created.ID {
+		t.Fatalf("expected run starter called for job %s, got %v", created.ID, starter.jobIDs)
+	}
+	if len(syncer.synced) != 0 {
+		t.Fatalf("expected schedule sync skipped, got %v", syncer.synced)
+	}
+}
+
+func TestCreateScheduledOneTimeStartsRunAt(t *testing.T) {
+	env := newTestBackupJobEnv(t)
+	starter := &mockRunStarter{}
+	syncer := &mockScheduleSyncer{}
+
+	svc, err := backupjob.NewService(backupjob.ServiceConfig{
+		Repo:           storage.NewBackupJobRepository(env.db),
+		OrgRepo:        storage.NewOrganizationRepository(env.db),
+		BucketRepo:     storage.NewBucketStoreRepository(env.db),
+		ScheduleSyncer: syncer,
+		RunStarter:     starter,
+		Logger:         env.logger,
+	})
+	if err != nil {
+		t.Fatalf("service: %v", err)
+	}
+
+	oneTime := time.Now().UTC().Add(2 * time.Hour)
+	created, err := svc.Create(backupjob.CreateInput{
+		MemberID: testMemberA,
+		Active:   true,
+		Schedule: backupjob.ScheduleInput{
+			Type:    "one_time",
+			OneTime: startAtPtr(oneTime),
+		},
+		JobConfig: backupjob.JobConfigInput{
+			OrganizationID: env.orgID,
+			BucketStoreID:  env.bucketID,
+			SharePointSite: "https://tenant.sharepoint.com/sites/demo",
+			Filters: backupjob.FilterInput{
+				DocumentLibrariesCSV: "Docs",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if len(starter.jobIDs) != 0 {
+		t.Fatalf("expected no immediate runs, got %v", starter.jobIDs)
+	}
+	if len(starter.scheduled) != 1 || starter.scheduled[0].jobID != created.ID {
+		t.Fatalf("expected scheduled run for job %s, got %v", created.ID, starter.scheduled)
+	}
+	if len(syncer.synced) != 0 {
+		t.Fatalf("expected schedule sync skipped, got %v", syncer.synced)
+	}
+}
+
 func TestCreate_InvalidCrossMemberReferences(t *testing.T) {
 	env := newTestBackupJobEnv(t)
 	interval := int64(3600)
@@ -282,6 +380,39 @@ func TestCreate_InvalidCrossMemberReferences(t *testing.T) {
 	if !errors.Is(err, backupjob.ErrInvalidOrganizationID) {
 		t.Fatalf("expected invalid organization error, got: %v", err)
 	}
+}
+
+type mockRunStarter struct {
+	jobIDs    []string
+	scheduled []scheduledBackupRun
+}
+
+type scheduledBackupRun struct {
+	jobID string
+	at    time.Time
+}
+
+func (m *mockRunStarter) StartRun(_ context.Context, _, jobID string) error {
+	m.jobIDs = append(m.jobIDs, jobID)
+	return nil
+}
+
+func (m *mockRunStarter) StartRunAt(_ context.Context, _, jobID string, at time.Time) error {
+	m.scheduled = append(m.scheduled, scheduledBackupRun{jobID: jobID, at: at})
+	return nil
+}
+
+type mockScheduleSyncer struct {
+	synced []string
+}
+
+func (m *mockScheduleSyncer) SyncJob(_ context.Context, job *storage.BackupJob) error {
+	m.synced = append(m.synced, job.ID)
+	return nil
+}
+
+func (m *mockScheduleSyncer) DeleteJobSchedule(context.Context, string) error {
+	return nil
 }
 
 func startAtPtr(v time.Time) *time.Time {

@@ -12,12 +12,7 @@ import { useJobReferences } from "@/hooks/use-job-references";
 import { clientApiFetch } from "@/lib/api/client";
 import { toErrorMessage } from "@/lib/api/errors";
 import { isoToLocalDateTime, localDateTimeToIso } from "@/lib/api/format";
-import type {
-  RestoreJob,
-  RestoreJobInput,
-  RestoreJobResponse,
-  RestoreRunStartResponse,
-} from "@/lib/api/types";
+import type { RestoreJob, RestoreJobInput, RestoreJobResponse } from "@/lib/api/types";
 
 type RestoreJobFormProps = {
   mode: "create" | "edit";
@@ -35,8 +30,6 @@ export function RestoreJobForm({ mode, job }: RestoreJobFormProps) {
   const [bucketStore, setBucketStore] = useState(job?.job_config.bucket_store ?? "");
   const [sharePointSite, setSharePointSite] = useState(job?.job_config.share_point_site ?? "");
   const [startAt, setStartAt] = useState(isoToLocalDateTime(job?.start_at));
-  const [active, setActive] = useState(job?.active ?? true);
-  const [runImmediately, setRunImmediately] = useState(false);
 
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -57,7 +50,6 @@ export function RestoreJobForm({ mode, job }: RestoreJobFormProps) {
     }
 
     const payload: RestoreJobInput = {
-      active,
       start_at: localDateTimeToIso(startAt),
       job_config: {
         organization,
@@ -69,16 +61,10 @@ export function RestoreJobForm({ mode, job }: RestoreJobFormProps) {
     setIsSaving(true);
     try {
       if (mode === "create") {
-        const created = await clientApiFetch<RestoreJobResponse>("/restore-jobs", {
+        await clientApiFetch<RestoreJobResponse>("/restore-jobs", {
           method: "POST",
           body: JSON.stringify(payload),
         });
-        if (runImmediately) {
-          await clientApiFetch<RestoreRunStartResponse>(
-            `/restore-jobs/${created.restore_job.id}/runs`,
-            { method: "POST" }
-          );
-        }
         router.push("/dashboard/restore-job/list");
         router.refresh();
         return;
@@ -86,7 +72,9 @@ export function RestoreJobForm({ mode, job }: RestoreJobFormProps) {
 
       await clientApiFetch<RestoreJobResponse>(`/restore-jobs/${job?.id}`, {
         method: "PUT",
-        body: JSON.stringify(payload),
+        body: JSON.stringify(
+          job?.active === false ? { ...payload, active: false } : payload
+        ),
       });
       setSuccessMessage("Restore job updated successfully.");
       router.refresh();
@@ -184,34 +172,15 @@ export function RestoreJobForm({ mode, job }: RestoreJobFormProps) {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="startAt">Scheduled start (optional, must be in the future)</Label>
+          <Label htmlFor="startAt">Start at (optional)</Label>
           <Input
             id="startAt"
             type="datetime-local"
             value={startAt}
             onChange={(event) => setStartAt(event.target.value)}
           />
+          <p className="text-sm text-muted-foreground">Runs immediately if left blank.</p>
         </div>
-
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={active}
-            onChange={(event) => setActive(event.target.checked)}
-          />
-          Job is active
-        </label>
-
-        {mode === "create" ? (
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={runImmediately}
-              onChange={(event) => setRunImmediately(event.target.checked)}
-            />
-            Run once immediately after creating
-          </label>
-        ) : null}
 
         <div className="flex items-center gap-3 pt-2">
           <Button type="submit" disabled={isSaving || (mode === "create" && !hasReferences)}>

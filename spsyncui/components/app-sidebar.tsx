@@ -28,7 +28,6 @@ const links = [
     section: "Jobs",
     links: [
       { title: "Backups", to: "/dashboard/backup-job/list" },
-      { title: "Backup Schedules", to: "/dashboard/backup-job/schedules" },
       { title: "Restore", to: "/dashboard/restore-job/list" },
     ],
   },

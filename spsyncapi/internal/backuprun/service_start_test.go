@@ -21,6 +21,11 @@ func (m *mockRunExecutor) StartBackupRun(_ context.Context, in temporal.RunWorkf
 	return nil
 }
 
+func (m *mockRunExecutor) StartBackupRunAt(_ context.Context, in temporal.RunWorkflowInput, _ time.Time) error {
+	m.started = append(m.started, in)
+	return nil
+}
+
 func (m *mockRunExecutor) StopBackupRun(_ context.Context, runID string) error {
 	m.stopped = append(m.stopped, runID)
 	return nil

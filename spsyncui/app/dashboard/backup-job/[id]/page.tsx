@@ -192,8 +192,9 @@ export default function DashboardBackupJobDetailPage() {
             />
             <ConfigRow label="Schedule" value={formatSchedule(job.schedule)} />
             <ConfigRow label="Active" value={job.active ? "Yes" : "No"} />
-            <ConfigRow label="Active window start" value={formatDateTime(job.start_at)} />
-            <ConfigRow label="Active window end" value={formatDateTime(job.end_at)} />
+            {job.start_at ? (
+              <ConfigRow label="Schedule start" value={formatDateTime(job.start_at)} />
+            ) : null}
             <ConfigRow label="Last run" value={formatDateTime(job.last_run)} />
             <ConfigRow label="Next run" value={formatDateTime(job.next_run)} />
             <ConfigRow label="Created at" value={formatDateTime(job.created_at)} />

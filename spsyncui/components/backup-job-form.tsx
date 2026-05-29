@@ -8,19 +8,28 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { useJobReferences } from "@/hooks/use-job-references";
 import { clientApiFetch } from "@/lib/api/client";
 import { toErrorMessage } from "@/lib/api/errors";
-import { isoToLocalDateTime, localDateTimeToIso, parseDocumentLibraries } from "@/lib/api/format";
+import {
+  frequencyToSeconds,
+  hasOptionalBackupFilters,
+  isoToLocalDateTime,
+  localDateTimeToIso,
+  parseDocumentLibraries,
+  secondsToFrequency,
+  type FrequencyUnit,
+} from "@/lib/api/format";
 import type {
   BackupJob,
   BackupJobInput,
   BackupJobResponse,
   BackupRunStartResponse,
-  Schedule,
+  ScheduleInput,
 } from "@/lib/api/types";
 
-type ScheduleType = "interval" | "cron" | "one_time";
+type ScheduleType = "one_time" | "recurring";
 
 type BackupJobFormProps = {
   mode: "create" | "edit";
@@ -37,13 +46,21 @@ function toNullableNumber(value: string): number | null {
 }
 
 function initialScheduleType(job?: BackupJob): ScheduleType {
+  if (job?.schedule.interval != null) {
+    return "recurring";
+  }
   if (job?.schedule.cron) {
-    return "cron";
+    return "recurring";
   }
-  if (job?.schedule.one_time) {
-    return "one_time";
+  return "one_time";
+}
+
+function initialFrequency(job?: BackupJob): { value: string; unit: FrequencyUnit } {
+  if (job?.schedule.interval != null) {
+    const { value, unit } = secondsToFrequency(job.schedule.interval);
+    return { value: String(value), unit };
   }
-  return "interval";
+  return { value: "1", unit: "hour" };
 }
 
 const selectClassName =
@@ -58,6 +75,10 @@ export function BackupJobForm({ mode, job }: BackupJobFormProps) {
   const [sharePointSite, setSharePointSite] = useState(job?.job_config.share_point_site ?? "");
   const [documentLibraries, setDocumentLibraries] = useState(
     job?.job_config.filters.document_libraries ?? ""
+  );
+
+  const [filtersEnabled, setFiltersEnabled] = useState(
+    job ? hasOptionalBackupFilters(job.job_config.filters) : false
   );
   const [minFileSize, setMinFileSize] = useState(
     job?.job_config.filters.min_file_size != null ? String(job.job_config.filters.min_file_size) : ""
@@ -79,43 +100,46 @@ export function BackupJobForm({ mode, job }: BackupJobFormProps) {
   );
 
   const [scheduleType, setScheduleType] = useState<ScheduleType>(initialScheduleType(job));
-  const [intervalSeconds, setIntervalSeconds] = useState(
-    job?.schedule.interval != null ? String(job.schedule.interval) : ""
-  );
-  const [cron, setCron] = useState(job?.schedule.cron ?? "");
-  const [oneTime, setOneTime] = useState(isoToLocalDateTime(job?.schedule.one_time));
-
-  const [active, setActive] = useState(job?.active ?? true);
-  const [startAt, setStartAt] = useState(isoToLocalDateTime(job?.start_at));
-  const [endAt, setEndAt] = useState(isoToLocalDateTime(job?.end_at));
-  const [runImmediately, setRunImmediately] = useState(false);
+  const initialFreq = initialFrequency(job);
+  const [frequencyValue, setFrequencyValue] = useState(initialFreq.value);
+  const [frequencyUnit, setFrequencyUnit] = useState<FrequencyUnit>(initialFreq.unit);
+  const [oneTimeStartAt, setOneTimeStartAt] = useState(isoToLocalDateTime(job?.schedule.one_time));
+  const [recurringStartAt, setRecurringStartAt] = useState(isoToLocalDateTime(job?.start_at));
+  const [runNow, setRunNow] = useState(false);
 
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const buildSchedule = (): Schedule | null => {
-    if (scheduleType === "interval") {
-      const seconds = toNullableNumber(intervalSeconds);
-      if (seconds == null || seconds <= 0) {
-        setErrorMessage("Interval must be a positive number of seconds.");
+  const hasLegacyCron = Boolean(job?.schedule.cron);
+
+  const buildSchedule = (): ScheduleInput | null => {
+    if (scheduleType === "one_time") {
+      const iso = localDateTimeToIso(oneTimeStartAt);
+      if (oneTimeStartAt && !iso) {
+        setErrorMessage("A valid start date is required.");
         return null;
       }
-      return { interval: seconds };
+      return {
+        type: "one_time",
+        one_time: iso,
+      };
     }
-    if (scheduleType === "cron") {
-      if (cron.trim().length === 0) {
-        setErrorMessage("A cron expression is required.");
-        return null;
-      }
-      return { cron: cron.trim() };
-    }
-    const iso = localDateTimeToIso(oneTime);
-    if (!iso) {
-      setErrorMessage("A valid one-time run date is required.");
+
+    const freq = toNullableNumber(frequencyValue);
+    if (freq == null || freq <= 0) {
+      setErrorMessage("Frequency must be a positive number.");
       return null;
     }
-    return { one_time: iso };
+    const interval = frequencyToSeconds(freq, frequencyUnit);
+    if (interval <= 0) {
+      setErrorMessage("Frequency must be a positive number.");
+      return null;
+    }
+    return {
+      type: "recurring",
+      interval,
+    };
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -144,9 +168,9 @@ export function BackupJobForm({ mode, job }: BackupJobFormProps) {
     }
 
     const payload: BackupJobInput = {
-      active,
-      start_at: localDateTimeToIso(startAt),
-      end_at: localDateTimeToIso(endAt),
+      active: true,
+      start_at: scheduleType === "recurring" ? localDateTimeToIso(recurringStartAt) : null,
+      end_at: null,
       schedule,
       job_config: {
         organization,
@@ -154,12 +178,12 @@ export function BackupJobForm({ mode, job }: BackupJobFormProps) {
         share_point_site: sharePointSite.trim(),
         filters: {
           document_libraries: libraries,
-          min_file_size: toNullableNumber(minFileSize),
-          max_file_size: toNullableNumber(maxFileSize),
-          created_after: localDateTimeToIso(createdAfter),
-          created_before: localDateTimeToIso(createdBefore),
-          updated_after: localDateTimeToIso(updatedAfter),
-          updated_before: localDateTimeToIso(updatedBefore),
+          min_file_size: filtersEnabled ? toNullableNumber(minFileSize) : null,
+          max_file_size: filtersEnabled ? toNullableNumber(maxFileSize) : null,
+          created_after: filtersEnabled ? localDateTimeToIso(createdAfter) : null,
+          created_before: filtersEnabled ? localDateTimeToIso(createdBefore) : null,
+          updated_after: filtersEnabled ? localDateTimeToIso(updatedAfter) : null,
+          updated_before: filtersEnabled ? localDateTimeToIso(updatedBefore) : null,
         },
       },
     };
@@ -171,7 +195,7 @@ export function BackupJobForm({ mode, job }: BackupJobFormProps) {
           method: "POST",
           body: JSON.stringify(payload),
         });
-        if (runImmediately) {
+        if (scheduleType === "recurring" && runNow) {
           await clientApiFetch<BackupRunStartResponse>(
             `/backup-jobs/${created.backup_job.id}/runs`,
             { method: "POST" }
@@ -303,152 +327,162 @@ export function BackupJobForm({ mode, job }: BackupJobFormProps) {
               value={scheduleType}
               onChange={(event) => setScheduleType(event.target.value as ScheduleType)}
             >
-              <option value="interval">Interval (seconds)</option>
-              <option value="cron">Cron expression</option>
               <option value="one_time">One-time</option>
+              <option value="recurring">Recurring</option>
             </select>
           </div>
 
-          {scheduleType === "interval" ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="intervalSeconds">Interval (seconds)</Label>
-              <Input
-                id="intervalSeconds"
-                type="number"
-                min={1}
-                value={intervalSeconds}
-                onChange={(event) => setIntervalSeconds(event.target.value)}
-                placeholder="3600"
-              />
-            </div>
-          ) : null}
-
-          {scheduleType === "cron" ? (
-            <div className="space-y-1.5">
-              <Label htmlFor="cron">Cron Expression</Label>
-              <Input
-                id="cron"
-                value={cron}
-                onChange={(event) => setCron(event.target.value)}
-                placeholder="0 2 * * *"
-              />
-            </div>
+          {hasLegacyCron && scheduleType === "recurring" ? (
+            <p className="text-sm text-muted-foreground">
+              This job uses a legacy cron schedule ({job?.schedule.cron}). Saving will replace it
+              with the interval below.
+            </p>
           ) : null}
 
           {scheduleType === "one_time" ? (
             <div className="space-y-1.5">
-              <Label htmlFor="oneTime">Run At</Label>
+              <Label htmlFor="oneTimeStartAt">Start at (optional)</Label>
               <Input
-                id="oneTime"
+                id="oneTimeStartAt"
                 type="datetime-local"
-                value={oneTime}
-                onChange={(event) => setOneTime(event.target.value)}
+                value={oneTimeStartAt}
+                onChange={(event) => setOneTimeStartAt(event.target.value)}
               />
+              <p className="text-sm text-muted-foreground">Runs immediately if left blank.</p>
             </div>
-          ) : null}
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="startAt">Active window start (optional)</Label>
-              <Input
-                id="startAt"
-                type="datetime-local"
-                value={startAt}
-                onChange={(event) => setStartAt(event.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="endAt">Active window end (optional)</Label>
-              <Input
-                id="endAt"
-                type="datetime-local"
-                value={endAt}
-                onChange={(event) => setEndAt(event.target.value)}
-              />
-            </div>
-          </div>
-
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={active}
-              onChange={(event) => setActive(event.target.checked)}
-            />
-            Job is active
-          </label>
-
-          {mode === "create" ? (
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={runImmediately}
-                onChange={(event) => setRunImmediately(event.target.checked)}
-              />
-              Run once immediately after creating
-            </label>
-          ) : null}
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="recurringStartAt">Start at (optional)</Label>
+                <Input
+                  id="recurringStartAt"
+                  type="datetime-local"
+                  value={recurringStartAt}
+                  onChange={(event) => setRecurringStartAt(event.target.value)}
+                />
+                <p className="text-sm text-muted-foreground">
+                  When the recurring schedule should begin. Leave blank to start immediately.
+                </p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="frequencyValue">Frequency</Label>
+                  <Input
+                    id="frequencyValue"
+                    type="number"
+                    min={1}
+                    value={frequencyValue}
+                    onChange={(event) => setFrequencyValue(event.target.value)}
+                    placeholder="1"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="frequencyUnit">Unit</Label>
+                  <select
+                    id="frequencyUnit"
+                    className={selectClassName}
+                    value={frequencyUnit}
+                    onChange={(event) => setFrequencyUnit(event.target.value as FrequencyUnit)}
+                  >
+                    <option value="minute">Minute(s)</option>
+                    <option value="hour">Hour(s)</option>
+                    <option value="day">Day(s)</option>
+                  </select>
+                </div>
+              </div>
+              {mode === "create" ? (
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={runNow}
+                    onChange={(event) => setRunNow(event.target.checked)}
+                  />
+                  Run now (one run immediately after creating)
+                </label>
+              ) : null}
+            </>
+          )}
         </section>
 
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold">Filters (optional)</h2>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="minFileSize">Min File Size (bytes)</Label>
-              <Input
-                id="minFileSize"
-                type="number"
-                min={0}
-                value={minFileSize}
-                onChange={(event) => setMinFileSize(event.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="maxFileSize">Max File Size (bytes)</Label>
-              <Input
-                id="maxFileSize"
-                type="number"
-                min={0}
-                value={maxFileSize}
-                onChange={(event) => setMaxFileSize(event.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="createdAfter">Created After</Label>
-              <Input
-                id="createdAfter"
-                type="datetime-local"
-                value={createdAfter}
-                onChange={(event) => setCreatedAfter(event.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="createdBefore">Created Before</Label>
-              <Input
-                id="createdBefore"
-                type="datetime-local"
-                value={createdBefore}
-                onChange={(event) => setCreatedBefore(event.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="updatedAfter">Updated After</Label>
-              <Input
-                id="updatedAfter"
-                type="datetime-local"
-                value={updatedAfter}
-                onChange={(event) => setUpdatedAfter(event.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="updatedBefore">Updated Before</Label>
-              <Input
-                id="updatedBefore"
-                type="datetime-local"
-                value={updatedBefore}
-                onChange={(event) => setUpdatedBefore(event.target.value)}
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">Filters</h2>
+            <div className="flex items-center gap-2">
+              <Label htmlFor="filtersEnabled" className="text-sm font-normal">
+                Enable filters
+              </Label>
+              <Switch
+                id="filtersEnabled"
+                checked={filtersEnabled}
+                onCheckedChange={setFiltersEnabled}
               />
             </div>
           </div>
+          {filtersEnabled ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="minFileSize">Min File Size (bytes)</Label>
+                <Input
+                  id="minFileSize"
+                  type="number"
+                  min={0}
+                  value={minFileSize}
+                  onChange={(event) => setMinFileSize(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="maxFileSize">Max File Size (bytes)</Label>
+                <Input
+                  id="maxFileSize"
+                  type="number"
+                  min={0}
+                  value={maxFileSize}
+                  onChange={(event) => setMaxFileSize(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="createdAfter">Created After</Label>
+                <Input
+                  id="createdAfter"
+                  type="datetime-local"
+                  value={createdAfter}
+                  onChange={(event) => setCreatedAfter(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="createdBefore">Created Before</Label>
+                <Input
+                  id="createdBefore"
+                  type="datetime-local"
+                  value={createdBefore}
+                  onChange={(event) => setCreatedBefore(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="updatedAfter">Updated After</Label>
+                <Input
+                  id="updatedAfter"
+                  type="datetime-local"
+                  value={updatedAfter}
+                  onChange={(event) => setUpdatedAfter(event.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="updatedBefore">Updated Before</Label>
+                <Input
+                  id="updatedBefore"
+                  type="datetime-local"
+                  value={updatedBefore}
+                  onChange={(event) => setUpdatedBefore(event.target.value)}
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Optional file size and date filters are disabled.
+            </p>
+          )}
         </section>
 
         <div className="flex items-center gap-3">

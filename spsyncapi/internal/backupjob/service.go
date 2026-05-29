@@ -33,6 +33,7 @@ var (
 )
 
 type ScheduleInput struct {
+	Type            string // "one_time" | "recurring" | ""
 	IntervalSeconds *int64
 	Cron            *string
 	OneTime         *time.Time
@@ -120,11 +121,18 @@ type ScheduleSyncer interface {
 	DeleteJobSchedule(ctx context.Context, jobID string) error
 }
 
+// RunStarter starts backup runs for a job (immediate or delayed).
+type RunStarter interface {
+	StartRun(ctx context.Context, memberID, jobID string) error
+	StartRunAt(ctx context.Context, memberID, jobID string, at time.Time) error
+}
+
 type Service struct {
 	repo           *storage.BackupJobRepository
 	orgRepo        *storage.OrganizationRepository
 	bucketRepo     *storage.BucketStoreRepository
 	scheduleSyncer ScheduleSyncer
+	runStarter     RunStarter
 	logger         *slog.Logger
 }
 
@@ -133,6 +141,7 @@ type ServiceConfig struct {
 	OrgRepo        *storage.OrganizationRepository
 	BucketRepo     *storage.BucketStoreRepository
 	ScheduleSyncer ScheduleSyncer
+	RunStarter     RunStarter
 	Logger         *slog.Logger
 }
 
@@ -153,19 +162,31 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 	if syncer == nil {
 		syncer = noopScheduleSyncer{}
 	}
+	starter := cfg.RunStarter
+	if starter == nil {
+		starter = noopRunStarter{}
+	}
 	return &Service{
 		repo:           cfg.Repo,
 		orgRepo:        cfg.OrgRepo,
 		bucketRepo:     cfg.BucketRepo,
 		scheduleSyncer: syncer,
+		runStarter:     starter,
 		logger:         cfg.Logger,
 	}, nil
 }
 
 type noopScheduleSyncer struct{}
 
-func (noopScheduleSyncer) SyncJob(context.Context, *storage.BackupJob) error      { return nil }
-func (noopScheduleSyncer) DeleteJobSchedule(context.Context, string) error { return nil }
+func (noopScheduleSyncer) SyncJob(context.Context, *storage.BackupJob) error { return nil }
+func (noopScheduleSyncer) DeleteJobSchedule(context.Context, string) error    { return nil }
+
+type noopRunStarter struct{}
+
+func (noopRunStarter) StartRun(context.Context, string, string) error { return nil }
+func (noopRunStarter) StartRunAt(context.Context, string, string, time.Time) error {
+	return nil
+}
 
 func (s *Service) Create(in CreateInput) (*BackupJobDetails, error) {
 	if strings.TrimSpace(in.MemberID) == "" {
@@ -208,10 +229,55 @@ func (s *Service) Create(in CreateInput) (*BackupJobDetails, error) {
 	if err := s.repo.Create(job); err != nil {
 		return nil, fmt.Errorf("create backup job: %w", err)
 	}
-	if err := s.syncSchedule(context.Background(), job); err != nil {
-		return nil, err
+	ctx := context.Background()
+	switch {
+	case isImmediateOneTime(normalized.Schedule):
+		if err := s.runStarter.StartRun(ctx, in.MemberID, job.ID); err != nil {
+			return nil, fmt.Errorf("start immediate backup run: %w", err)
+		}
+	case isScheduledOneTime(normalized.Schedule):
+		if err := s.scheduleSyncer.DeleteJobSchedule(ctx, job.ID); err != nil {
+			return nil, fmt.Errorf("clear backup job schedule: %w", err)
+		}
+		if err := s.runStarter.StartRunAt(ctx, in.MemberID, job.ID, *normalized.Schedule.OneTime); err != nil {
+			return nil, fmt.Errorf("start scheduled backup run: %w", err)
+		}
+	default:
+		if err := s.syncSchedule(ctx, job); err != nil {
+			return nil, err
+		}
 	}
 	return toDetails(job), nil
+}
+
+func isImmediateOneTime(s ScheduleInput) bool {
+	if s.OneTime != nil {
+		return false
+	}
+	switch strings.TrimSpace(s.Type) {
+	case "one_time":
+		return true
+	case "recurring":
+		return false
+	default:
+		// Legacy: no typed schedule and no one_time timestamp → run once immediately.
+		return s.IntervalSeconds == nil &&
+			(s.Cron == nil || strings.TrimSpace(*s.Cron) == "")
+	}
+}
+
+func isScheduledOneTime(s ScheduleInput) bool {
+	if s.OneTime == nil {
+		return false
+	}
+	switch strings.TrimSpace(s.Type) {
+	case "recurring":
+		return false
+	case "one_time", "":
+		return true
+	default:
+		return true
+	}
 }
 
 func (s *Service) Get(memberID, id string) (*BackupJobDetails, error) {
@@ -325,10 +391,25 @@ func (s *Service) Delete(memberID, id string) error {
 }
 
 func (s *Service) syncSchedule(ctx context.Context, job *storage.BackupJob) error {
+	if usesRunStarterSchedule(job) {
+		if err := s.scheduleSyncer.DeleteJobSchedule(ctx, job.ID); err != nil {
+			return fmt.Errorf("sync backup job schedule: %w", err)
+		}
+		return nil
+	}
 	if err := s.scheduleSyncer.SyncJob(ctx, job); err != nil {
 		return fmt.Errorf("sync backup job schedule: %w", err)
 	}
 	return nil
+}
+
+// usesRunStarterSchedule is true for one-time jobs executed via StartRun/StartRunAt (not Temporal schedules).
+func usesRunStarterSchedule(job *storage.BackupJob) bool {
+	if job.ScheduleOneTime != nil {
+		return true
+	}
+	return job.ScheduleIntervalSeconds == nil &&
+		(job.ScheduleCron == nil || strings.TrimSpace(*job.ScheduleCron) == "")
 }
 
 func (s *Service) validateJobReferences(memberID string, cfg JobConfigInput) error {
@@ -379,6 +460,21 @@ func validateInput(in CreateInput) error {
 }
 
 func validateSchedule(s ScheduleInput) error {
+	scheduleType := strings.TrimSpace(s.Type)
+	if scheduleType == "recurring" {
+		if s.IntervalSeconds == nil || *s.IntervalSeconds <= 0 {
+			return ErrInvalidInterval
+		}
+		return nil
+	}
+	if scheduleType == "one_time" {
+		if s.OneTime != nil && !s.OneTime.After(time.Now().UTC()) {
+			return ErrInvalidOneTime
+		}
+		return nil
+	}
+
+	// Backward compatibility: exactly one of interval, cron, or one_time.
 	setCount := 0
 	if s.IntervalSeconds != nil {
 		setCount++

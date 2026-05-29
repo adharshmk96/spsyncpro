@@ -1,6 +1,7 @@
 package restorejob
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -14,7 +15,8 @@ import (
 
 var (
 	ErrRestoreJobNotFound      = errors.New("restore job not found")
-	ErrInvalidStartAt          = errors.New("start_at must be in the future when set on create")
+	ErrInvalidStartAt          = errors.New("start_at must be in the future when set")
+	ErrInvalidStartAtPast      = errors.New("start_at cannot be in the past")
 	ErrInvalidOrganizationID   = errors.New("job_config.organization is required")
 	ErrInvalidBucketStoreID    = errors.New("job_config.bucket_store is required")
 	ErrInvalidSharePointSite   = errors.New("job_config.share_point_site is required")
@@ -59,10 +61,17 @@ type RestoreJobDetails struct {
 	UpdatedAt time.Time        `json:"updated_at"`
 }
 
+// RunStarter starts restore runs for a job.
+type RunStarter interface {
+	StartRun(ctx context.Context, memberID, jobID string) error
+	StartRunAt(ctx context.Context, memberID, jobID string, at time.Time) error
+}
+
 type Service struct {
 	repo       *storage.RestoreJobRepository
 	orgRepo    *storage.OrganizationRepository
 	bucketRepo *storage.BucketStoreRepository
+	runStarter RunStarter
 	logger     *slog.Logger
 }
 
@@ -70,6 +79,7 @@ type ServiceConfig struct {
 	Repo       *storage.RestoreJobRepository
 	OrgRepo    *storage.OrganizationRepository
 	BucketRepo *storage.BucketStoreRepository
+	RunStarter RunStarter
 	Logger     *slog.Logger
 }
 
@@ -86,12 +96,24 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 	if cfg.Logger == nil {
 		return nil, errors.New("logger is required")
 	}
+	starter := cfg.RunStarter
+	if starter == nil {
+		starter = noopRunStarter{}
+	}
 	return &Service{
 		repo:       cfg.Repo,
 		orgRepo:    cfg.OrgRepo,
 		bucketRepo: cfg.BucketRepo,
+		runStarter: starter,
 		logger:     cfg.Logger,
 	}, nil
+}
+
+type noopRunStarter struct{}
+
+func (noopRunStarter) StartRun(context.Context, string, string) error { return nil }
+func (noopRunStarter) StartRunAt(context.Context, string, string, time.Time) error {
+	return nil
 }
 
 func (s *Service) Create(in CreateInput) (*RestoreJobDetails, error) {
@@ -122,6 +144,16 @@ func (s *Service) Create(in CreateInput) (*RestoreJobDetails, error) {
 
 	if err := s.repo.Create(job); err != nil {
 		return nil, fmt.Errorf("create restore job: %w", err)
+	}
+	ctx := context.Background()
+	if normalized.StartAt == nil {
+		if err := s.runStarter.StartRun(ctx, in.MemberID, job.ID); err != nil {
+			return nil, fmt.Errorf("start immediate restore run: %w", err)
+		}
+	} else {
+		if err := s.runStarter.StartRunAt(ctx, in.MemberID, job.ID, *normalized.StartAt); err != nil {
+			return nil, fmt.Errorf("start scheduled restore run: %w", err)
+		}
 	}
 	return toDetails(job), nil
 }
@@ -237,8 +269,11 @@ func normalizeAndValidateCreate(in CreateInput) (CreateInput, error) {
 	if strings.TrimSpace(in.JobConfig.SharePointSite) == "" {
 		return CreateInput{}, ErrInvalidSharePointSite
 	}
-	if in.StartAt != nil && !in.StartAt.After(time.Now().UTC()) {
-		return CreateInput{}, ErrInvalidStartAt
+	if in.StartAt != nil {
+		now := time.Now().UTC()
+		if !in.StartAt.After(now) {
+			return CreateInput{}, ErrInvalidStartAtPast
+		}
 	}
 	return in, nil
 }

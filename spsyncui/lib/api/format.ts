@@ -55,13 +55,51 @@ export function formatBucketType(type: BucketType): string {
   return type === "s3" ? "S3" : "Azure Blob";
 }
 
-/** Summarizes an API schedule (exactly one of interval / cron / one_time). */
+export type FrequencyUnit = "minute" | "hour" | "day";
+
+const SECONDS_PER_MINUTE = 60;
+const SECONDS_PER_HOUR = 3600;
+const SECONDS_PER_DAY = 86400;
+
+/** Converts frequency + unit to interval seconds for the API. */
+export function frequencyToSeconds(value: number, unit: FrequencyUnit): number {
+  switch (unit) {
+    case "minute":
+      return value * SECONDS_PER_MINUTE;
+    case "hour":
+      return value * SECONDS_PER_HOUR;
+    case "day":
+      return value * SECONDS_PER_DAY;
+  }
+}
+
+/** Converts stored interval seconds to a display frequency and unit. */
+export function secondsToFrequency(seconds: number): { value: number; unit: FrequencyUnit } {
+  if (seconds > 0 && seconds % SECONDS_PER_DAY === 0) {
+    return { value: seconds / SECONDS_PER_DAY, unit: "day" };
+  }
+  if (seconds > 0 && seconds % SECONDS_PER_HOUR === 0) {
+    return { value: seconds / SECONDS_PER_HOUR, unit: "hour" };
+  }
+  if (seconds > 0 && seconds % SECONDS_PER_MINUTE === 0) {
+    return { value: seconds / SECONDS_PER_MINUTE, unit: "minute" };
+  }
+  return { value: seconds, unit: "minute" };
+}
+
+function formatIntervalHuman(seconds: number): string {
+  const { value, unit } = secondsToFrequency(seconds);
+  const label = value === 1 ? unit : `${unit}s`;
+  return `Every ${value} ${label}`;
+}
+
+/** Summarizes an API schedule (interval / cron / one_time). */
 export function formatSchedule(schedule: Schedule | null | undefined): string {
   if (!schedule) {
     return "-";
   }
   if (schedule.interval != null) {
-    return `Every ${schedule.interval}s`;
+    return formatIntervalHuman(schedule.interval);
   }
   if (schedule.cron) {
     return `Cron: ${schedule.cron}`;
@@ -69,7 +107,29 @@ export function formatSchedule(schedule: Schedule | null | undefined): string {
   if (schedule.one_time) {
     return `Once at ${formatDateTime(schedule.one_time)}`;
   }
+  if (schedule.type === "one_time") {
+    return "One-time (immediate)";
+  }
   return "-";
+}
+
+/** True when any optional backup filter constraint is set. */
+export function hasOptionalBackupFilters(filters: {
+  min_file_size?: number | null;
+  max_file_size?: number | null;
+  created_after?: string | null;
+  created_before?: string | null;
+  updated_after?: string | null;
+  updated_before?: string | null;
+}): boolean {
+  return (
+    filters.min_file_size != null ||
+    filters.max_file_size != null ||
+    !!filters.created_after ||
+    !!filters.created_before ||
+    !!filters.updated_after ||
+    !!filters.updated_before
+  );
 }
 
 /** Splits the API's comma-separated document_libraries string into a list. */

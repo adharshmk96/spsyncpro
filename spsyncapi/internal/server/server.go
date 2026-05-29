@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"spsyncapi/internal/auth"
 	"spsyncapi/internal/backupjob"
@@ -112,27 +113,6 @@ func New(cfg *config.Config, logger *slog.Logger, metrics *telemetry.HTTPMetrics
 	scheduleOrchestrator := temporal.NewScheduleOrchestrator(temporalClient, cfg.Temporal, logger)
 	runExecutor := temporal.NewRunExecutor(temporalClient, cfg.Temporal)
 
-	backupJobSvc, err := backupjob.NewService(backupjob.ServiceConfig{
-		Repo:           backupJobRepo,
-		OrgRepo:        orgRepo,
-		BucketRepo:     bucketStoreRepo,
-		ScheduleSyncer: scheduleOrchestrator,
-		Logger:         logger,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create backup job service: %w", err)
-	}
-
-	restoreJobSvc, err := restorejob.NewService(restorejob.ServiceConfig{
-		Repo:       restoreJobRepo,
-		OrgRepo:    orgRepo,
-		BucketRepo: bucketStoreRepo,
-		Logger:     logger,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create restore job service: %w", err)
-	}
-
 	backupRunSvc, err := backuprun.NewService(backuprun.ServiceConfig{
 		RunRepo:  backupRunRepo,
 		JobRepo:  backupJobRepo,
@@ -151,6 +131,29 @@ func New(cfg *config.Config, logger *slog.Logger, metrics *telemetry.HTTPMetrics
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create restore run service: %w", err)
+	}
+
+	backupJobSvc, err := backupjob.NewService(backupjob.ServiceConfig{
+		Repo:           backupJobRepo,
+		OrgRepo:        orgRepo,
+		BucketRepo:     bucketStoreRepo,
+		ScheduleSyncer: scheduleOrchestrator,
+		RunStarter:     backupRunStarter{svc: backupRunSvc},
+		Logger:         logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create backup job service: %w", err)
+	}
+
+	restoreJobSvc, err := restorejob.NewService(restorejob.ServiceConfig{
+		Repo:       restoreJobRepo,
+		OrgRepo:    orgRepo,
+		BucketRepo: bucketStoreRepo,
+		RunStarter: restoreRunStarter{svc: restoreRunSvc},
+		Logger:     logger,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create restore job service: %w", err)
 	}
 
 	// --- gin engine --------------------------------------------------------
@@ -198,4 +201,32 @@ func (s *Server) Start() error {
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	return s.http.Shutdown(ctx)
+}
+
+type backupRunStarter struct {
+	svc *backuprun.Service
+}
+
+func (b backupRunStarter) StartRun(ctx context.Context, memberID, jobID string) error {
+	_, err := b.svc.StartRun(ctx, memberID, jobID)
+	return err
+}
+
+func (b backupRunStarter) StartRunAt(ctx context.Context, memberID, jobID string, at time.Time) error {
+	_, err := b.svc.StartRunAt(ctx, memberID, jobID, at)
+	return err
+}
+
+type restoreRunStarter struct {
+	svc *restorerun.Service
+}
+
+func (r restoreRunStarter) StartRun(ctx context.Context, memberID, jobID string) error {
+	_, err := r.svc.StartRun(ctx, memberID, jobID)
+	return err
+}
+
+func (r restoreRunStarter) StartRunAt(ctx context.Context, memberID, jobID string, at time.Time) error {
+	_, err := r.svc.StartRunAt(ctx, memberID, jobID, at)
+	return err
 }

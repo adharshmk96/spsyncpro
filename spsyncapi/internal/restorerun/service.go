@@ -24,6 +24,7 @@ var (
 // RunExecutor starts and stops Temporal workflows for restore runs.
 type RunExecutor interface {
 	StartRestoreRun(ctx context.Context, in temporal.RunWorkflowInput) error
+	StartRestoreRunAt(ctx context.Context, in temporal.RunWorkflowInput, at time.Time) error
 	StopRestoreRun(ctx context.Context, runID string) error
 }
 
@@ -119,6 +120,46 @@ func (s *Service) StartRun(ctx context.Context, memberID, jobID string) (*RunDet
 		MemberID: memberID,
 		Resume:   true,
 	}); err != nil {
+		return nil, fmt.Errorf("restore run service: start workflow: %w", err)
+	}
+
+	details := toRunDetails(run)
+	return &details, nil
+}
+
+// StartRunAt creates a restore run and starts its workflow at the given time.
+func (s *Service) StartRunAt(ctx context.Context, memberID, jobID string, at time.Time) (*RunDetails, error) {
+	if strings.TrimSpace(memberID) == "" {
+		return nil, ErrInvalidMemberID
+	}
+	if _, err := s.jobRepo.FindActiveByID(jobID, memberID); err != nil {
+		if errors.Is(err, storage.ErrRestoreJobNotFound) {
+			return nil, ErrRestoreJobNotFound
+		}
+		return nil, fmt.Errorf("restore run service: validate job: %w", err)
+	}
+
+	now := time.Now().UTC()
+	run := &storage.RestoreRun{
+		ID:        uuid.NewString(),
+		JobID:     jobID,
+		MemberID:  memberID,
+		CreatedAt: now,
+	}
+	if err := s.runRepo.Create(run); err != nil {
+		return nil, fmt.Errorf("restore run service: create run: %w", err)
+	}
+
+	if s.executor == nil {
+		return nil, fmt.Errorf("restore run service: run executor not configured")
+	}
+	in := temporal.RunWorkflowInput{
+		RunID:    run.ID,
+		JobID:    jobID,
+		MemberID: memberID,
+		Resume:   true,
+	}
+	if err := s.executor.StartRestoreRunAt(ctx, in, at); err != nil {
 		return nil, fmt.Errorf("restore run service: start workflow: %w", err)
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"spsyncapi/internal/config"
 
@@ -27,22 +28,48 @@ func NewRunExecutor(c client.Client, cfg config.TemporalConfig) *RunExecutor {
 func (e *RunExecutor) StartBackupRun(ctx context.Context, in RunWorkflowInput) error {
 	in.Kind = RunKindBackup
 	in.Resume = true
-	return e.startRun(ctx, BackupWorkflowID(in.RunID), BackupRunWorkflow, in)
+	return e.startRun(ctx, BackupWorkflowID(in.RunID), BackupRunWorkflow, in, 0)
+}
+
+// StartBackupRunAt starts a backup run workflow at or after the given time.
+func (e *RunExecutor) StartBackupRunAt(ctx context.Context, in RunWorkflowInput, at time.Time) error {
+	in.Kind = RunKindBackup
+	in.Resume = true
+	delay := time.Until(at.UTC())
+	if delay < 0 {
+		delay = 0
+	}
+	return e.startRun(ctx, BackupWorkflowID(in.RunID), BackupRunWorkflow, in, delay)
 }
 
 // StartRestoreRun starts a restore run workflow for an existing run row.
 func (e *RunExecutor) StartRestoreRun(ctx context.Context, in RunWorkflowInput) error {
 	in.Kind = RunKindRestore
 	in.Resume = true
-	return e.startRun(ctx, RestoreWorkflowID(in.RunID), RestoreRunWorkflow, in)
+	return e.startRun(ctx, RestoreWorkflowID(in.RunID), RestoreRunWorkflow, in, 0)
 }
 
-func (e *RunExecutor) startRun(ctx context.Context, workflowID string, workflow interface{}, in RunWorkflowInput) error {
-	_, err := e.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+// StartRestoreRunAt starts a restore run workflow at or after the given time.
+func (e *RunExecutor) StartRestoreRunAt(ctx context.Context, in RunWorkflowInput, at time.Time) error {
+	in.Kind = RunKindRestore
+	in.Resume = true
+	delay := time.Until(at.UTC())
+	if delay < 0 {
+		delay = 0
+	}
+	return e.startRun(ctx, RestoreWorkflowID(in.RunID), RestoreRunWorkflow, in, delay)
+}
+
+func (e *RunExecutor) startRun(ctx context.Context, workflowID string, workflow interface{}, in RunWorkflowInput, startDelay time.Duration) error {
+	opts := client.StartWorkflowOptions{
 		ID:                    workflowID,
 		TaskQueue:             e.taskQueue,
 		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-	}, workflow, in)
+	}
+	if startDelay > 0 {
+		opts.StartDelay = startDelay
+	}
+	_, err := e.client.ExecuteWorkflow(ctx, opts, workflow, in)
 	if err != nil {
 		var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
 		if errors.As(err, &alreadyStarted) {

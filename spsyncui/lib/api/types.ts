@@ -82,8 +82,16 @@ export type BucketStoresResponse = { bucket_stores: BucketStore[] };
 /* ------------------------------- Backup Jobs ------------------------------- */
 
 export type Schedule = {
+  type?: "one_time" | "recurring" | null;
   interval?: number | null;
   cron?: string | null;
+  one_time?: string | null;
+};
+
+/** Schedule payload for create/update backup jobs. */
+export type ScheduleInput = {
+  type?: "one_time" | "recurring";
+  interval?: number | null;
   one_time?: string | null;
 };
 
@@ -140,7 +148,7 @@ export type BackupJobInput = {
   start_at?: string | null;
   end_at?: string | null;
   active: boolean;
-  schedule: Schedule;
+  schedule: ScheduleInput;
   job_config: BackupJobConfigInput;
 };
 
@@ -168,7 +176,7 @@ export type RestoreJob = {
 export type RestoreJobInput = {
   start_at?: string | null;
   last_run?: string | null;
-  active: boolean;
+  active?: boolean;
   job_config: RestoreJobConfig;
 };
 
