@@ -2067,6 +2067,9 @@ const docTemplate = `{
                 },
                 "one_time": {
                     "type": "string"
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         },
@@ -2216,6 +2219,9 @@ const docTemplate = `{
                 },
                 "one_time": {
                     "type": "string"
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         },
@@ -2253,6 +2259,9 @@ const docTemplate = `{
         "handlers.backupRunStartResponse": {
             "type": "object",
             "properties": {
+                "backup_job": {
+                    "$ref": "#/definitions/backupjob.BackupJobDetails"
+                },
                 "backup_run": {
                     "$ref": "#/definitions/backuprun.RunDetails"
                 }
@@ -2307,12 +2316,6 @@ const docTemplate = `{
                 },
                 "job_config": {
                     "$ref": "#/definitions/handlers.backupJobConfigRequest"
-                },
-                "last_run": {
-                    "type": "string"
-                },
-                "next_run": {
-                    "type": "string"
                 },
                 "schedule": {
                     "$ref": "#/definitions/handlers.backupJobScheduleRequest"
@@ -2378,9 +2381,6 @@ const docTemplate = `{
                 },
                 "job_config": {
                     "$ref": "#/definitions/handlers.restoreJobConfigRequest"
-                },
-                "last_run": {
-                    "type": "string"
                 },
                 "start_at": {
                     "type": "string"
@@ -2563,6 +2563,9 @@ const docTemplate = `{
         "handlers.restoreRunStartResponse": {
             "type": "object",
             "properties": {
+                "restore_job": {
+                    "$ref": "#/definitions/restorejob.RestoreJobDetails"
+                },
                 "restore_run": {
                     "$ref": "#/definitions/restorerun.RunDetails"
                 }
@@ -2599,12 +2602,6 @@ const docTemplate = `{
                 },
                 "job_config": {
                     "$ref": "#/definitions/handlers.backupJobConfigRequest"
-                },
-                "last_run": {
-                    "type": "string"
-                },
-                "next_run": {
-                    "type": "string"
                 },
                 "schedule": {
                     "$ref": "#/definitions/handlers.backupJobScheduleRequest"
@@ -2668,9 +2665,6 @@ const docTemplate = `{
                 },
                 "job_config": {
                     "$ref": "#/definitions/handlers.restoreJobConfigRequest"
-                },
-                "last_run": {
-                    "type": "string"
                 },
                 "start_at": {
                     "type": "string"

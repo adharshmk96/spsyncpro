@@ -2061,6 +2061,9 @@
                 },
                 "one_time": {
                     "type": "string"
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         },
@@ -2210,6 +2213,9 @@
                 },
                 "one_time": {
                     "type": "string"
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         },
@@ -2247,6 +2253,9 @@
         "handlers.backupRunStartResponse": {
             "type": "object",
             "properties": {
+                "backup_job": {
+                    "$ref": "#/definitions/backupjob.BackupJobDetails"
+                },
                 "backup_run": {
                     "$ref": "#/definitions/backuprun.RunDetails"
                 }
@@ -2301,12 +2310,6 @@
                 },
                 "job_config": {
                     "$ref": "#/definitions/handlers.backupJobConfigRequest"
-                },
-                "last_run": {
-                    "type": "string"
-                },
-                "next_run": {
-                    "type": "string"
                 },
                 "schedule": {
                     "$ref": "#/definitions/handlers.backupJobScheduleRequest"
@@ -2372,9 +2375,6 @@
                 },
                 "job_config": {
                     "$ref": "#/definitions/handlers.restoreJobConfigRequest"
-                },
-                "last_run": {
-                    "type": "string"
                 },
                 "start_at": {
                     "type": "string"
@@ -2557,6 +2557,9 @@
         "handlers.restoreRunStartResponse": {
             "type": "object",
             "properties": {
+                "restore_job": {
+                    "$ref": "#/definitions/restorejob.RestoreJobDetails"
+                },
                 "restore_run": {
                     "$ref": "#/definitions/restorerun.RunDetails"
                 }
@@ -2593,12 +2596,6 @@
                 },
                 "job_config": {
                     "$ref": "#/definitions/handlers.backupJobConfigRequest"
-                },
-                "last_run": {
-                    "type": "string"
-                },
-                "next_run": {
-                    "type": "string"
                 },
                 "schedule": {
                     "$ref": "#/definitions/handlers.backupJobScheduleRequest"
@@ -2662,9 +2659,6 @@
                 },
                 "job_config": {
                     "$ref": "#/definitions/handlers.restoreJobConfigRequest"
-                },
-                "last_run": {
-                    "type": "string"
                 },
                 "start_at": {
                     "type": "string"
