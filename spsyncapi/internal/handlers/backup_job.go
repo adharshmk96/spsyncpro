@@ -46,8 +46,6 @@ type backupJobConfigRequest struct {
 }
 
 type createBackupJobRequest struct {
-	LastRun   *time.Time               `json:"last_run"`
-	NextRun   *time.Time               `json:"next_run"`
 	StartAt   *time.Time               `json:"start_at"`
 	EndAt     *time.Time               `json:"end_at"`
 	Active    bool                     `json:"active"`
@@ -56,8 +54,6 @@ type createBackupJobRequest struct {
 }
 
 type updateBackupJobRequest struct {
-	LastRun   *time.Time               `json:"last_run"`
-	NextRun   *time.Time               `json:"next_run"`
 	StartAt   *time.Time               `json:"start_at"`
 	EndAt     *time.Time               `json:"end_at"`
 	Active    bool                     `json:"active"`
@@ -249,8 +245,6 @@ func (h *BackupJobHandler) handleBackupJobError(c *gin.Context, err error) {
 
 func toCreateInput(req createBackupJobRequest) backupjob.CreateInput {
 	return backupjob.CreateInput{
-		LastRun: req.LastRun,
-		NextRun: req.NextRun,
 		StartAt: req.StartAt,
 		EndAt:   req.EndAt,
 		Active:  req.Active,
@@ -281,8 +275,6 @@ func toUpdateInput(id string, req updateBackupJobRequest) backupjob.UpdateInput 
 	in := toCreateInput(createBackupJobRequest(req))
 	return backupjob.UpdateInput{
 		ID:        id,
-		LastRun:   in.LastRun,
-		NextRun:   in.NextRun,
 		StartAt:   in.StartAt,
 		EndAt:     in.EndAt,
 		Active:    in.Active,

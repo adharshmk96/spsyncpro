@@ -93,6 +93,17 @@ function formatIntervalHuman(seconds: number): string {
   return `Every ${value} ${label}`;
 }
 
+/** Human-readable schedule type from API `schedule.type`. */
+export function formatScheduleType(schedule: Schedule | null | undefined): string {
+  if (!schedule?.type) {
+    if (schedule?.interval != null || schedule?.cron) {
+      return "Recurring";
+    }
+    return "One-time";
+  }
+  return schedule.type === "recurring" ? "Recurring" : "One-time";
+}
+
 /** Summarizes an API schedule (interval / cron / one_time). */
 export function formatSchedule(schedule: Schedule | null | undefined): string {
   if (!schedule) {

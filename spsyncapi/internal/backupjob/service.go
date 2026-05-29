@@ -58,8 +58,6 @@ type JobConfigInput struct {
 
 type CreateInput struct {
 	MemberID  string
-	LastRun   *time.Time
-	NextRun   *time.Time
 	StartAt   *time.Time
 	EndAt     *time.Time
 	Active    bool
@@ -70,8 +68,6 @@ type CreateInput struct {
 type UpdateInput struct {
 	ID string
 
-	LastRun   *time.Time
-	NextRun   *time.Time
 	StartAt   *time.Time
 	EndAt     *time.Time
 	Active    bool
@@ -80,6 +76,7 @@ type UpdateInput struct {
 }
 
 type ScheduleDetails struct {
+	Type            string     `json:"type"`
 	IntervalSeconds *int64     `json:"interval,omitempty"`
 	Cron            *string    `json:"cron,omitempty"`
 	OneTime         *time.Time `json:"one_time,omitempty"`
@@ -204,8 +201,6 @@ func (s *Service) Create(in CreateInput) (*BackupJobDetails, error) {
 	job := &storage.BackupJob{
 		ID:                      uuid.NewString(),
 		MemberID:                in.MemberID,
-		LastRun:                 normalized.LastRun,
-		NextRun:                 normalized.NextRun,
 		StartAt:                 normalized.StartAt,
 		EndAt:                   normalized.EndAt,
 		ScheduleIntervalSeconds: normalized.Schedule.IntervalSeconds,
@@ -225,6 +220,7 @@ func (s *Service) Create(in CreateInput) (*BackupJobDetails, error) {
 		CreatedAt:               now,
 		UpdatedAt:               now,
 	}
+	ApplyScheduleMetadataOnSave(job, now)
 
 	if err := s.repo.Create(job); err != nil {
 		return nil, fmt.Errorf("create backup job: %w", err)
@@ -238,6 +234,10 @@ func (s *Service) Create(in CreateInput) (*BackupJobDetails, error) {
 	case isScheduledOneTime(normalized.Schedule):
 		if err := s.scheduleSyncer.DeleteJobSchedule(ctx, job.ID); err != nil {
 			return nil, fmt.Errorf("clear backup job schedule: %w", err)
+		}
+		RecordPendingRun(job, *normalized.Schedule.OneTime, now)
+		if err := s.repo.Update(job); err != nil {
+			return nil, fmt.Errorf("update backup job pending run: %w", err)
 		}
 		if err := s.runStarter.StartRunAt(ctx, in.MemberID, job.ID, *normalized.Schedule.OneTime); err != nil {
 			return nil, fmt.Errorf("start scheduled backup run: %w", err)
@@ -318,8 +318,6 @@ func (s *Service) Update(memberID string, in UpdateInput) (*BackupJobDetails, er
 	}
 	normalized, err := normalizeAndValidateInput(CreateInput{
 		MemberID:  memberID,
-		LastRun:   in.LastRun,
-		NextRun:   in.NextRun,
 		StartAt:   in.StartAt,
 		EndAt:     in.EndAt,
 		Active:    in.Active,
@@ -341,8 +339,6 @@ func (s *Service) Update(memberID string, in UpdateInput) (*BackupJobDetails, er
 		return nil, fmt.Errorf("find backup job: %w", err)
 	}
 
-	job.LastRun = normalized.LastRun
-	job.NextRun = normalized.NextRun
 	job.StartAt = normalized.StartAt
 	job.EndAt = normalized.EndAt
 	job.Active = normalized.Active
@@ -359,7 +355,9 @@ func (s *Service) Update(memberID string, in UpdateInput) (*BackupJobDetails, er
 	job.FilterUpdatedAfter = normalized.JobConfig.Filters.UpdatedAfter
 	job.FilterCreatedBefore = normalized.JobConfig.Filters.CreatedBefore
 	job.FilterUpdatedBefore = normalized.JobConfig.Filters.UpdatedBefore
-	job.UpdatedAt = time.Now().UTC()
+	now := time.Now().UTC()
+	ApplyScheduleMetadataOnSave(job, now)
+	job.UpdatedAt = now
 
 	if err := s.repo.Update(job); err != nil {
 		if errors.Is(err, storage.ErrBackupJobNotFound) {
@@ -558,6 +556,7 @@ func toDetails(job *storage.BackupJob) *BackupJobDetails {
 		EndAt:   job.EndAt,
 		Active:  job.Active,
 		Schedule: ScheduleDetails{
+			Type:            ScheduleType(job),
 			IntervalSeconds: job.ScheduleIntervalSeconds,
 			Cron:            job.ScheduleCron,
 			OneTime:         job.ScheduleOneTime,

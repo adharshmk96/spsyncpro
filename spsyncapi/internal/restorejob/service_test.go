@@ -137,6 +137,17 @@ func TestCreateImmediateRestoreStartsRun(t *testing.T) {
 	if len(starter.scheduled) != 0 {
 		t.Fatalf("expected no scheduled runs, got %v", starter.scheduled)
 	}
+
+	got, err := svc.Get(testMemberA, created.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.StartAt == nil {
+		t.Fatal("expected start_at to be set for immediate restore")
+	}
+	if got.LastRun != nil {
+		t.Fatalf("last_run = %v, want nil before work starts with mock starter", got.LastRun)
+	}
 }
 
 func TestCreateScheduledRestoreStartsRunAt(t *testing.T) {
@@ -162,6 +173,17 @@ func TestCreateScheduledRestoreStartsRunAt(t *testing.T) {
 	}
 	if len(starter.scheduled) != 1 || starter.scheduled[0].jobID != created.ID {
 		t.Fatalf("expected scheduled run for %s, got %v", created.ID, starter.scheduled)
+	}
+
+	got, err := svc.Get(testMemberA, created.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.StartAt == nil || !got.StartAt.Equal(startAt) {
+		t.Fatalf("start_at = %v, want %v", got.StartAt, startAt)
+	}
+	if got.LastRun != nil {
+		t.Fatalf("last_run = %v, want nil before scheduled work starts", got.LastRun)
 	}
 }
 

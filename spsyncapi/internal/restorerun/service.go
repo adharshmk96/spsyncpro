@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"spsyncapi/internal/restorejob"
 	"spsyncapi/internal/storage"
 	"spsyncapi/internal/temporal"
 
@@ -121,6 +122,9 @@ func (s *Service) StartRun(ctx context.Context, memberID, jobID string) (*RunDet
 		Resume:   true,
 	}); err != nil {
 		return nil, fmt.Errorf("restore run service: start workflow: %w", err)
+	}
+	if err := s.markRunStarted(jobID, memberID, now); err != nil {
+		return nil, err
 	}
 
 	details := toRunDetails(run)
@@ -262,6 +266,21 @@ func (s *Service) getRunWithJobCheck(memberID, runID string) (*storage.RestoreRu
 	}
 
 	return run, nil
+}
+
+func (s *Service) markRunStarted(jobID, memberID string, runAt time.Time) error {
+	job, err := s.jobRepo.FindActiveByID(jobID, memberID)
+	if err != nil {
+		if errors.Is(err, storage.ErrRestoreJobNotFound) {
+			return ErrRestoreJobNotFound
+		}
+		return fmt.Errorf("restore run service: load job for run timestamps: %w", err)
+	}
+	restorejob.RecordRunStarted(job, runAt, time.Now().UTC())
+	if err := s.jobRepo.Update(job); err != nil {
+		return fmt.Errorf("restore run service: update job run timestamps: %w", err)
+	}
+	return nil
 }
 
 func toRunDetails(run *storage.RestoreRun) RunDetails {

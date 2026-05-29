@@ -32,7 +32,6 @@ type JobConfigInput struct {
 type CreateInput struct {
 	MemberID  string
 	StartAt   *time.Time
-	LastRun   *time.Time
 	Active    bool
 	JobConfig JobConfigInput
 }
@@ -40,7 +39,6 @@ type CreateInput struct {
 type UpdateInput struct {
 	ID        string
 	StartAt   *time.Time
-	LastRun   *time.Time
 	Active    bool
 	JobConfig JobConfigInput
 }
@@ -132,8 +130,6 @@ func (s *Service) Create(in CreateInput) (*RestoreJobDetails, error) {
 	job := &storage.RestoreJob{
 		ID:             uuid.NewString(),
 		MemberID:       in.MemberID,
-		StartAt:        normalized.StartAt,
-		LastRun:        normalized.LastRun,
 		Active:         normalized.Active,
 		OrganizationID: normalized.JobConfig.OrganizationID,
 		BucketStoreID:  normalized.JobConfig.BucketStoreID,
@@ -141,6 +137,7 @@ func (s *Service) Create(in CreateInput) (*RestoreJobDetails, error) {
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
+	ApplyScheduleOnSave(job, normalized.StartAt, now)
 
 	if err := s.repo.Create(job); err != nil {
 		return nil, fmt.Errorf("create restore job: %w", err)
@@ -151,9 +148,14 @@ func (s *Service) Create(in CreateInput) (*RestoreJobDetails, error) {
 			return nil, fmt.Errorf("start immediate restore run: %w", err)
 		}
 	} else {
-		if err := s.runStarter.StartRunAt(ctx, in.MemberID, job.ID, *normalized.StartAt); err != nil {
+		if err := s.runStarter.StartRunAt(ctx, in.MemberID, job.ID, *job.StartAt); err != nil {
 			return nil, fmt.Errorf("start scheduled restore run: %w", err)
 		}
+	}
+
+	job, err = s.repo.FindActiveByID(job.ID, in.MemberID)
+	if err != nil {
+		return nil, fmt.Errorf("reload restore job after create: %w", err)
 	}
 	return toDetails(job), nil
 }
@@ -210,13 +212,13 @@ func (s *Service) Update(memberID string, in UpdateInput) (*RestoreJobDetails, e
 		return nil, fmt.Errorf("find restore job: %w", err)
 	}
 
-	job.StartAt = normalized.StartAt
-	job.LastRun = normalized.LastRun
+	now := time.Now().UTC()
+	ApplyScheduleOnSave(job, normalized.StartAt, now)
 	job.Active = normalized.Active
 	job.OrganizationID = normalized.JobConfig.OrganizationID
 	job.BucketStoreID = normalized.JobConfig.BucketStoreID
 	job.SharePointSite = normalized.JobConfig.SharePointSite
-	job.UpdatedAt = time.Now().UTC()
+	job.UpdatedAt = now
 
 	if err := s.repo.Update(job); err != nil {
 		if errors.Is(err, storage.ErrRestoreJobNotFound) {
@@ -282,7 +284,6 @@ func normalizeAndValidateUpdate(in UpdateInput) (UpdateInput, error) {
 	out := UpdateInput{
 		ID:        in.ID,
 		StartAt:   in.StartAt,
-		LastRun:   in.LastRun,
 		Active:    in.Active,
 		JobConfig: in.JobConfig,
 	}

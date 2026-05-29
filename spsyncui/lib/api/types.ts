@@ -82,7 +82,7 @@ export type BucketStoresResponse = { bucket_stores: BucketStore[] };
 /* ------------------------------- Backup Jobs ------------------------------- */
 
 export type Schedule = {
-  type?: "one_time" | "recurring" | null;
+  type: "one_time" | "recurring";
   interval?: number | null;
   cron?: string | null;
   one_time?: string | null;
@@ -175,7 +175,6 @@ export type RestoreJob = {
 
 export type RestoreJobInput = {
   start_at?: string | null;
-  last_run?: string | null;
   active?: boolean;
   job_config: RestoreJobConfig;
 };

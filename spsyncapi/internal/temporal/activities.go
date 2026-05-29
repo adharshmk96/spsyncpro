@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"time"
 
+	"spsyncapi/internal/backupjob"
+	"spsyncapi/internal/restorejob"
 	"spsyncapi/internal/storage"
 
 	"github.com/google/uuid"
@@ -50,6 +52,9 @@ func (a *Activities) CreateBackupRun(ctx context.Context, in ScheduledBackupInpu
 	}
 	if err := a.BackupRunRepo.Create(run); err != nil {
 		return "", fmt.Errorf("create backup run activity: %w", err)
+	}
+	if err := a.markBackupRunStarted(in.JobID, in.MemberID, now); err != nil {
+		return "", err
 	}
 	a.Logger.Info("backup run created", "run_id", run.ID, "job_id", in.JobID)
 	return run.ID, nil
@@ -101,6 +106,9 @@ func (a *Activities) transferBackupFiles(ctx context.Context, in TransferFilesIn
 		run.StartAt = &now
 		if err := a.BackupRunRepo.Update(run); err != nil {
 			return fmt.Errorf("transfer backup files: set start_at: %w", err)
+		}
+		if err := a.markBackupRunStarted(in.JobID, in.MemberID, now); err != nil {
+			return err
 		}
 	}
 
@@ -154,6 +162,9 @@ func (a *Activities) transferRestoreFiles(ctx context.Context, in TransferFilesI
 		run.StartAt = &now
 		if err := a.RestoreRunRepo.Update(run); err != nil {
 			return fmt.Errorf("transfer restore files: set start_at: %w", err)
+		}
+		if err := a.markRestoreRunStarted(in.JobID, in.MemberID, now); err != nil {
+			return err
 		}
 	}
 
@@ -239,6 +250,30 @@ func (a *Activities) finalizeRestoreRun(ctx context.Context, run *storage.Restor
 	run.EndAt = &now
 	if err := a.RestoreRunRepo.Update(run); err != nil {
 		return fmt.Errorf("finalize restore run: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) markBackupRunStarted(jobID, memberID string, runAt time.Time) error {
+	job, err := a.BackupJobRepo.FindActiveByID(jobID, memberID)
+	if err != nil {
+		return fmt.Errorf("mark backup run started: load job: %w", err)
+	}
+	backupjob.RecordRunStarted(job, runAt, time.Now().UTC())
+	if err := a.BackupJobRepo.Update(job); err != nil {
+		return fmt.Errorf("mark backup run started: update job: %w", err)
+	}
+	return nil
+}
+
+func (a *Activities) markRestoreRunStarted(jobID, memberID string, runAt time.Time) error {
+	job, err := a.RestoreJobRepo.FindActiveByID(jobID, memberID)
+	if err != nil {
+		return fmt.Errorf("mark restore run started: load job: %w", err)
+	}
+	restorejob.RecordRunStarted(job, runAt, time.Now().UTC())
+	if err := a.RestoreJobRepo.Update(job); err != nil {
+		return fmt.Errorf("mark restore run started: update job: %w", err)
 	}
 	return nil
 }

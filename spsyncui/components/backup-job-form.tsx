@@ -46,10 +46,10 @@ function toNullableNumber(value: string): number | null {
 }
 
 function initialScheduleType(job?: BackupJob): ScheduleType {
-  if (job?.schedule.interval != null) {
-    return "recurring";
+  if (job?.schedule.type) {
+    return job.schedule.type;
   }
-  if (job?.schedule.cron) {
+  if (job?.schedule.interval != null || job?.schedule.cron) {
     return "recurring";
   }
   return "one_time";

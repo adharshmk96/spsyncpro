@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"spsyncapi/internal/backupjob"
 	"spsyncapi/internal/storage"
 	"spsyncapi/internal/temporal"
 
@@ -124,6 +125,9 @@ func (s *Service) StartRun(ctx context.Context, memberID, jobID string) (*RunDet
 	}); err != nil {
 		return nil, fmt.Errorf("backup run service: start workflow: %w", err)
 	}
+	if err := s.markRunStarted(jobID, memberID, now); err != nil {
+		return nil, err
+	}
 
 	details := toRunDetails(run)
 	return &details, nil
@@ -163,6 +167,9 @@ func (s *Service) StartRunAt(ctx context.Context, memberID, jobID string, at tim
 	}
 	if err := s.executor.StartBackupRunAt(ctx, in, at); err != nil {
 		return nil, fmt.Errorf("backup run service: start workflow: %w", err)
+	}
+	if err := s.markPendingRun(jobID, memberID, at.UTC()); err != nil {
+		return nil, err
 	}
 
 	details := toRunDetails(run)
@@ -264,6 +271,36 @@ func (s *Service) getRunWithJobCheck(memberID, runID string) (*storage.BackupRun
 	}
 
 	return run, nil
+}
+
+func (s *Service) markRunStarted(jobID, memberID string, runAt time.Time) error {
+	job, err := s.jobRepo.FindActiveByID(jobID, memberID)
+	if err != nil {
+		if errors.Is(err, storage.ErrBackupJobNotFound) {
+			return ErrBackupJobNotFound
+		}
+		return fmt.Errorf("backup run service: load job for run timestamps: %w", err)
+	}
+	backupjob.RecordRunStarted(job, runAt, time.Now().UTC())
+	if err := s.jobRepo.Update(job); err != nil {
+		return fmt.Errorf("backup run service: update job run timestamps: %w", err)
+	}
+	return nil
+}
+
+func (s *Service) markPendingRun(jobID, memberID string, at time.Time) error {
+	job, err := s.jobRepo.FindActiveByID(jobID, memberID)
+	if err != nil {
+		if errors.Is(err, storage.ErrBackupJobNotFound) {
+			return ErrBackupJobNotFound
+		}
+		return fmt.Errorf("backup run service: load job for pending run: %w", err)
+	}
+	backupjob.RecordPendingRun(job, at, time.Now().UTC())
+	if err := s.jobRepo.Update(job); err != nil {
+		return fmt.Errorf("backup run service: update job pending run: %w", err)
+	}
+	return nil
 }
 
 func toRunDetails(run *storage.BackupRun) RunDetails {

@@ -28,14 +28,12 @@ type restoreJobConfigRequest struct {
 
 type createRestoreJobRequest struct {
 	StartAt   *time.Time              `json:"start_at"`
-	LastRun   *time.Time              `json:"last_run"`
 	Active    *bool                   `json:"active"`
 	JobConfig restoreJobConfigRequest `json:"job_config" binding:"required"`
 }
 
 type updateRestoreJobRequest struct {
 	StartAt   *time.Time              `json:"start_at"`
-	LastRun   *time.Time              `json:"last_run"`
 	Active    *bool                   `json:"active"`
 	JobConfig restoreJobConfigRequest `json:"job_config" binding:"required"`
 }
@@ -222,7 +220,6 @@ func toRestoreCreateInput(memberID string, req createRestoreJobRequest) restorej
 	return restorejob.CreateInput{
 		MemberID: memberID,
 		StartAt:  req.StartAt,
-		LastRun:  req.LastRun,
 		Active:   resolveRestoreActive(req.Active),
 		JobConfig: restorejob.JobConfigInput{
 			OrganizationID: req.JobConfig.Organization,
@@ -236,7 +233,6 @@ func toRestoreUpdateInput(id string, req updateRestoreJobRequest) restorejob.Upd
 	return restorejob.UpdateInput{
 		ID:      id,
 		StartAt: req.StartAt,
-		LastRun: req.LastRun,
 		Active:  resolveRestoreActive(req.Active),
 		JobConfig: restorejob.JobConfigInput{
 			OrganizationID: req.JobConfig.Organization,

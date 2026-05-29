@@ -1,6 +1,7 @@
 package restorerun_test
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"testing"
@@ -8,9 +9,20 @@ import (
 
 	"spsyncapi/internal/restorerun"
 	"spsyncapi/internal/storage"
+	"spsyncapi/internal/temporal"
 
 	"github.com/google/uuid"
 )
+
+type noopRestoreExecutor struct{}
+
+func (noopRestoreExecutor) StartRestoreRun(context.Context, temporal.RunWorkflowInput) error {
+	return nil
+}
+func (noopRestoreExecutor) StartRestoreRunAt(context.Context, temporal.RunWorkflowInput, time.Time) error {
+	return nil
+}
+func (noopRestoreExecutor) StopRestoreRun(context.Context, string) error { return nil }
 
 const testMemberA = "member-restore-run-a"
 
@@ -123,5 +135,58 @@ func TestGetRestoreRunNotFound(t *testing.T) {
 	_, err := svc.Get(testMemberA, "missing-run", 1, 20)
 	if err == nil {
 		t.Fatal("expected not found")
+	}
+}
+
+func TestStartRunSetsJobLastRun(t *testing.T) {
+	db, err := storage.Open("file::memory:")
+	if err != nil {
+		t.Fatalf("open test db: %v", err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	jobRepo := storage.NewRestoreJobRepository(db)
+	runRepo := storage.NewRestoreRunRepository(db)
+
+	now := time.Now().UTC()
+	jobID := uuid.NewString()
+	if err := jobRepo.Create(&storage.RestoreJob{
+		ID:             jobID,
+		MemberID:       testMemberA,
+		StartAt:        &now,
+		Active:         true,
+		OrganizationID: "org-1",
+		BucketStoreID:  "bucket-1",
+		SharePointSite: "https://example.sharepoint.com/sites/demo",
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}); err != nil {
+		t.Fatalf("create restore job: %v", err)
+	}
+
+	svc, err := restorerun.NewService(restorerun.ServiceConfig{
+		RunRepo:  runRepo,
+		JobRepo:  jobRepo,
+		Executor: noopRestoreExecutor{},
+		Logger:   logger,
+	})
+	if err != nil {
+		t.Fatalf("restore run service: %v", err)
+	}
+
+	before := time.Now().UTC()
+	if _, err := svc.StartRun(context.Background(), testMemberA, jobID); err != nil {
+		t.Fatalf("start run: %v", err)
+	}
+
+	job, err := jobRepo.FindActiveByID(jobID, testMemberA)
+	if err != nil {
+		t.Fatalf("find job: %v", err)
+	}
+	if job.LastRun == nil {
+		t.Fatal("expected last_run to be set after start")
+	}
+	if job.LastRun.Before(before.Add(-time.Second)) {
+		t.Fatalf("last_run %v is before run start window", job.LastRun)
 	}
 }

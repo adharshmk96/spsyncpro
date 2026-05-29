@@ -14,6 +14,7 @@ import {
   formatDateTime,
   formatRunStatus,
   formatSchedule,
+  formatScheduleType,
   hasOptionalBackupFilters,
   parseDocumentLibraries,
 } from "@/lib/api/format";
@@ -91,6 +92,8 @@ export default function DashboardBackupJobDetailPage() {
     setErrorMessage(null);
     try {
       await clientApiFetch(`/backup-jobs/${jobId}/runs`, { method: "POST" });
+      const jobData = await clientApiFetch<BackupJobResponse>(`/backup-jobs/${jobId}`);
+      setJob(jobData.backup_job);
       setRuns(await fetchRuns());
     } catch (error) {
       console.error("Failed to start backup run.", error);
@@ -187,6 +190,7 @@ export default function DashboardBackupJobDetailPage() {
             <ConfigRow label="Organization" value={orgName} />
             <ConfigRow label="Bucket store" value={bucketName} />
             <ConfigRow label="SharePoint site URL" value={job.job_config.share_point_site} />
+            <ConfigRow label="Schedule type" value={formatScheduleType(job.schedule)} />
             <ConfigRow label="Schedule" value={formatSchedule(job.schedule)} />
             <ConfigRow label="Active" value={job.active ? "Yes" : "No"} />
             {job.start_at ? (
