@@ -1,0 +1,11 @@
+data/
+bin/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.env
+.env.*
+Taskfile.yml
+e2e/
+docs/
+.cursor/

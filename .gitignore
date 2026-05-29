@@ -1,1 +1,5 @@
 .env
+spsyncapi/data/*.sqlite*
+spsyncapi/bin/
+spsyncui/.next/
+spsyncui/node_modules/

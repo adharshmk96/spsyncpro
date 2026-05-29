@@ -1,4 +1,4 @@
-# Local development: ephemeral Temporal (start-dev). App uses SQLite (see spsyncapi/config.yaml).
+# Local development: ephemeral Temporal, SQLite app DB, containerized API + worker + UI.
 services:
   temporal:
     image: temporalio/server:1.29.0
@@ -22,3 +22,66 @@ services:
       TEMPORAL_CORS_ORIGINS: http://localhost:3000
     ports:
       - "8088:8080"
+
+  spsyncapi:
+    build:
+      context: ./spsyncapi
+      dockerfile: Dockerfile
+    image: spsyncpro/spsyncapi:local
+    container_name: spsyncapi
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SPSYNCAPI_METRICS_ENABLED: "false"
+    volumes:
+      - spsyncapi_data:/app/data
+    ports:
+      - "8080:8080"
+    depends_on:
+      temporal:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  spsyncapi-worker:
+    build:
+      context: ./spsyncapi
+      dockerfile: Dockerfile
+    image: spsyncpro/spsyncapi:local
+    container_name: spsyncapi-worker
+    restart: unless-stopped
+    command: ["worker"]
+    env_file:
+      - .env
+    environment:
+      SPSYNCAPI_METRICS_ENABLED: "false"
+    volumes:
+      - spsyncapi_data:/app/data
+    depends_on:
+      temporal:
+        condition: service_started
+      spsyncapi:
+        condition: service_healthy
+
+  spsyncui:
+    build:
+      context: ./spsyncui
+      dockerfile: Dockerfile
+    image: spsyncpro/spsyncui:local
+    container_name: spsyncui
+    restart: unless-stopped
+    environment:
+      SPSYNC_API_URL: http://spsyncapi:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      spsyncapi:
+        condition: service_healthy
+
+volumes:
+  spsyncapi_data:

@@ -75,3 +75,15 @@ tasks:
     desc: Start the Temporal worker with config.prod.yaml (PostgreSQL)
     cmds:
       - go run . worker --config config.prod.yaml
+
+  compose:up:
+    desc: Build and start full local stack (Temporal, API, worker, UI)
+    dir: ..
+    cmds:
+      - docker compose up -d --build
+
+  compose:up:prod:
+    desc: Build and start full production stack
+    dir: ..
+    cmds:
+      - "{{.COMPOSE_PROD}} up -d --build"

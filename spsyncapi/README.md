@@ -158,7 +158,24 @@ The server handles `SIGINT` and `SIGTERM`, draining in-flight requests before ex
 | Temporal | Ephemeral `start-dev` (state lost on container restart) | PostgreSQL-backed `auto-setup` |
 | App database | SQLite (`config.yaml`) | PostgreSQL (`config.prod.yaml`) |
 
-### Local development
+### Docker (full stack)
+
+From the **repository root**, copy [`.env.example`](../.env.example) to `.env`, set secrets, then:
+
+```bash
+docker compose up -d --build
+# or from spsyncapi/: task compose:up
+```
+
+| Service | URL |
+|---------|-----|
+| UI | http://localhost:3000 |
+| API | http://localhost:8080 |
+| Temporal UI | http://localhost:8088 |
+
+Production stack: `docker compose -f docker-compose.prod.yml up -d --build` (or `task compose:up:prod`).
+
+### Local development (native)
 
 From the **repository root**:
 
