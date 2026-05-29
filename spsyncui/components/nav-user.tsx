@@ -8,7 +8,6 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -20,8 +19,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { authClient } from "@/lib/auth-client"
-import { ChevronsUpDownIcon, SparklesIcon, BadgeCheckIcon, CreditCardIcon, BellIcon, LogOutIcon } from "lucide-react"
+import { logout } from "@/lib/api/auth"
+import { ChevronsUpDownIcon, LogOutIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
 
@@ -42,12 +41,7 @@ export function NavUser({
     setIsLoggingOut(true)
 
     try {
-      const { error } = await authClient.signOut()
-      if (error) {
-        console.warn("Sidebar sign-out failed:", error.message)
-        return
-      }
-
+      await logout()
       router.push("/login")
       router.refresh()
     } catch (logoutError) {
@@ -96,32 +90,6 @@ export function NavUser({
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {/* <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <SparklesIcon
-                />
-                Upgrade to Pro
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <BadgeCheckIcon
-                />
-                Account
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <CreditCardIcon
-                />
-                Billing
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <BellIcon
-                />
-                Notifications
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator /> */}
             <DropdownMenuItem onClick={handleLogout} disabled={isLoggingOut}>
               <LogOutIcon
               />

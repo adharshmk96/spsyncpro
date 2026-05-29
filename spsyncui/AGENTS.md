@@ -8,5 +8,9 @@ Tech stack
 - bun runtime
 - nextjs
 - shadcn ui
-- better auth
-- postgresql database with drizzle orm
+
+Data & auth
+- This UI has NO database and NO ORM. All data and auth come from the Go `spsyncapi` backend (`/api/v1`).
+- A thin BFF lives under `app/api`: `app/api/v1/[...path]` proxies to the Go API and injects the JWT; `app/api/auth/{login,register,logout}` manage the httpOnly auth cookie.
+- Server components read via `serverApiFetch` (`lib/api/server.ts`); client components read via `clientApiFetch` (`lib/api/client.ts`). Never add direct DB access or business logic here.
+- Configure `SPSYNC_API_URL` in `.env`.

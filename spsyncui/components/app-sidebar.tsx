@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Building2Icon, LandmarkIcon } from "lucide-react"
+import { Building2Icon } from "lucide-react"
 
 import { TeamSwitcher } from "@/components/team-switcher"
 import { NavUser } from "@/components/nav-user"
@@ -34,7 +34,11 @@ const links = [
   },
   {
     section: "Settings",
-    links: [{ title: "Organization", to: "/dashboard/organization/settings" }],
+    links: [
+      { title: "Organizations", to: "/dashboard/organization/list" },
+      { title: "Bucket Stores", to: "/dashboard/bucket-store/list" },
+      { title: "Account", to: "/dashboard/account" },
+    ],
   },
 ] as const
 

@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 
 import { AppSidebar } from "@/components/app-sidebar";
 import {
@@ -17,21 +16,19 @@ import {
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ModeToggle } from "@/components/mode-toggle";
-import { auth } from "@/lib/auth";
+import { getCurrentMember } from "@/lib/api/session";
 
 export default async function DashboardLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
+  const member = await getCurrentMember();
 
-  if (!session?.user) {
+  if (!member) {
     redirect("/login");
   }
 
-  const displayName = session.user.name ?? "User";
-  const displayEmail = session.user.email;
+  const displayEmail = member.email;
+  const displayName = displayEmail.split("@")[0] ?? "User";
 
   return (
     <TooltipProvider>

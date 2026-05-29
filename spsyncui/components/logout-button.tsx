@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { authClient } from "@/lib/auth-client";
+import { logout } from "@/lib/api/auth";
 
 export function LogoutButton() {
   const router = useRouter();
@@ -14,13 +14,7 @@ export function LogoutButton() {
     setIsLoading(true);
 
     try {
-      const { error } = await authClient.signOut();
-
-      if (error) {
-        console.warn("Sign-out failed:", error.message);
-        return;
-      }
-
+      await logout();
       router.push("/login");
       router.refresh();
     } catch (logoutError) {

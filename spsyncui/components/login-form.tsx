@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { cn } from "@/lib/utils";
-import { authClient } from "@/lib/auth-client";
+import { login } from "@/lib/api/auth";
+import { toErrorMessage } from "@/lib/api/errors";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -44,22 +45,12 @@ export function LoginForm({
     setError(null);
 
     try {
-      const { error: signInError } = await authClient.signIn.email({
-        email,
-        password,
-      });
-
-      if (signInError) {
-        console.warn("Sign-in failed:", signInError.message);
-        setError(signInError.message ?? "Invalid email or password.");
-        return;
-      }
-
+      await login(email, password);
       router.push("/dashboard");
       router.refresh();
     } catch (submitError) {
-      console.error("Unexpected sign-in error:", submitError);
-      setError("Unable to sign in. Please try again.");
+      console.warn("Sign-in failed:", submitError);
+      setError(toErrorMessage(submitError, "Invalid email or password."));
     } finally {
       setIsLoading(false);
     }
@@ -89,7 +80,15 @@ export function LoginForm({
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <div className="flex items-center justify-between">
+                  <FieldLabel htmlFor="password">Password</FieldLabel>
+                  <Link
+                    href="/forgot-password"
+                    className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
                 <Input id="password" name="password" type="password" required />
                 {error ? (
                   <FieldDescription className="text-destructive">

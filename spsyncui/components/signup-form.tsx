@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { cn } from "@/lib/utils";
-import { authClient } from "@/lib/auth-client";
+import { register } from "@/lib/api/auth";
+import { toErrorMessage } from "@/lib/api/errors";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -31,13 +32,11 @@ export function SignupForm({
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (formData: FormData) => {
-    const name = formData.get("name");
     const email = formData.get("email");
     const password = formData.get("password");
     const confirmPassword = formData.get("confirmPassword");
 
     if (
-      typeof name !== "string" ||
       typeof email !== "string" ||
       typeof password !== "string" ||
       typeof confirmPassword !== "string"
@@ -51,27 +50,21 @@ export function SignupForm({
       return;
     }
 
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters long.");
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
     try {
-      const { error: signUpError } = await authClient.signUp.email({
-        name,
-        email,
-        password,
-      });
-
-      if (signUpError) {
-        console.warn("Sign-up failed:", signUpError.message);
-        setError(signUpError.message ?? "Unable to create account.");
-        return;
-      }
-
+      await register(email, password);
       router.push("/dashboard");
       router.refresh();
     } catch (submitError) {
-      console.error("Unexpected sign-up error:", submitError);
-      setError("Unable to create your account. Please try again.");
+      console.warn("Sign-up failed:", submitError);
+      setError(toErrorMessage(submitError, "Unable to create account."));
     } finally {
       setIsLoading(false);
     }
@@ -89,16 +82,6 @@ export function SignupForm({
         <CardContent>
           <form action={handleSubmit}>
             <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="name">Full Name</FieldLabel>
-                <Input
-                  id="name"
-                  name="name"
-                  type="text"
-                  placeholder="John Doe"
-                  required
-                />
-              </Field>
               <Field>
                 <FieldLabel htmlFor="email">Email</FieldLabel>
                 <Input
