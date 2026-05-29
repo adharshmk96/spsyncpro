@@ -26,14 +26,17 @@ type Config struct {
 
 // TemporalConfig holds Temporal client and worker settings.
 type TemporalConfig struct {
-	HostPort  string
-	Namespace string
-	TaskQueue string
+	HostPort           string
+	Namespace          string
+	TaskQueue          string
+	ReconcileInterval  time.Duration
 }
 
 // DBConfig holds database connection settings.
 type DBConfig struct {
-	SQLitePath string
+	Driver      string
+	SQLitePath  string
+	PostgresDSN string
 }
 
 // AuthConfig holds JWT and auth lifecycle settings.
@@ -78,7 +81,9 @@ func Load() (*Config, error) {
 			ExportInterval: viper.GetDuration("metrics.export_interval"),
 		},
 		DB: DBConfig{
-			SQLitePath: viper.GetString("db.sqlite_path"),
+			Driver:      viper.GetString("db.driver"),
+			SQLitePath:  viper.GetString("db.sqlite_path"),
+			PostgresDSN: viper.GetString("db.postgres_dsn"),
 		},
 		Auth: AuthConfig{
 			JWTSecret:        viper.GetString("auth.jwt_secret"),
@@ -91,9 +96,10 @@ func Load() (*Config, error) {
 			Secret: viper.GetString("encryption.secret"),
 		},
 		Temporal: TemporalConfig{
-			HostPort:  viper.GetString("temporal.host_port"),
-			Namespace: viper.GetString("temporal.namespace"),
-			TaskQueue: viper.GetString("temporal.task_queue"),
+			HostPort:          viper.GetString("temporal.host_port"),
+			Namespace:         viper.GetString("temporal.namespace"),
+			TaskQueue:         viper.GetString("temporal.task_queue"),
+			ReconcileInterval: viper.GetDuration("temporal.reconcile_interval"),
 		},
 	}
 
@@ -117,7 +123,9 @@ func setDefaults() {
 	viper.SetDefault("metrics.otlp_endpoint", "localhost:4318")
 	viper.SetDefault("metrics.otlp_insecure", true)
 	viper.SetDefault("metrics.export_interval", 15*time.Second)
+	viper.SetDefault("db.driver", "sqlite")
 	viper.SetDefault("db.sqlite_path", "./data/spsyncapi.sqlite")
+	viper.SetDefault("db.postgres_dsn", "host=localhost port=5433 user=spsync password=spsync dbname=spsyncapi sslmode=disable")
 	viper.SetDefault("auth.jwt_issuer", "spsyncapi")
 	viper.SetDefault("auth.access_token_ttl", 15*time.Minute)
 	viper.SetDefault("auth.session_ttl", 30*24*time.Hour)
@@ -125,6 +133,7 @@ func setDefaults() {
 	viper.SetDefault("temporal.host_port", "localhost:7233")
 	viper.SetDefault("temporal.namespace", "default")
 	viper.SetDefault("temporal.task_queue", "spsync-transfer")
+	viper.SetDefault("temporal.reconcile_interval", 2*time.Minute)
 }
 
 func (e *EncryptionConfig) validate() error {
@@ -177,6 +186,30 @@ func (c *Config) validate() error {
 		return err
 	}
 
+	if err := c.DB.validate(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (d *DBConfig) validate() error {
+	driver := strings.ToLower(strings.TrimSpace(d.Driver))
+	if driver == "" {
+		driver = "sqlite"
+	}
+	switch driver {
+	case "sqlite":
+		if strings.TrimSpace(d.SQLitePath) == "" {
+			return fmt.Errorf("db.sqlite_path must not be empty when db.driver is sqlite")
+		}
+	case "postgres", "postgresql":
+		if strings.TrimSpace(d.PostgresDSN) == "" {
+			return fmt.Errorf("db.postgres_dsn must not be empty when db.driver is postgres")
+		}
+	default:
+		return fmt.Errorf("invalid db.driver: %q (use sqlite or postgres)", d.Driver)
+	}
 	return nil
 }
 
@@ -189,6 +222,9 @@ func (t *TemporalConfig) validate() error {
 	}
 	if strings.TrimSpace(t.TaskQueue) == "" {
 		return fmt.Errorf("temporal.task_queue must not be empty")
+	}
+	if t.ReconcileInterval < 0 {
+		return fmt.Errorf("invalid temporal.reconcile_interval: %s", t.ReconcileInterval)
 	}
 	return nil
 }

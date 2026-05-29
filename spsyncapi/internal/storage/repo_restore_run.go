@@ -28,6 +28,19 @@ func (r *RestoreRunRepository) Update(run *RestoreRun) error {
 	return nil
 }
 
+// FindIncompleteByJobID returns an in-progress run for jobID, or nil if none.
+func (r *RestoreRunRepository) FindIncompleteByJobID(jobID string) (*RestoreRun, error) {
+	var run RestoreRun
+	err := r.db.Where("job_id = ? AND end_at IS NULL", jobID).First(&run).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("restore run repo: find incomplete by job: %w", err)
+	}
+	return &run, nil
+}
+
 // ListIncomplete returns restore runs that have not finished (end_at IS NULL).
 func (r *RestoreRunRepository) ListIncomplete() ([]RestoreRun, error) {
 	var runs []RestoreRun

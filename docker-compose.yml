@@ -1,3 +1,4 @@
+# Local development: ephemeral Temporal (start-dev). App uses SQLite (see spsyncapi/config.yaml).
 services:
   temporal:
     image: temporalio/server:1.29.0

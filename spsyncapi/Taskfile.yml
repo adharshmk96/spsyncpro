@@ -4,6 +4,7 @@ vars:
   BIN_DIR: bin
   SWAG_VERSION: v1.16.6
   SWAG_CMD: go run github.com/swaggo/swag/cmd/swag@{{.SWAG_VERSION}}
+  COMPOSE_PROD: docker compose -f ../docker-compose.prod.yml
 
 tasks:
   default:
@@ -12,9 +13,14 @@ tasks:
       - task --list
 
   run:
-    desc: Start the API server
-    cmds:      
+    desc: Start the API server (dev config, SQLite)
+    cmds:
       - SPSYNCAPI_METRICS_ENABLED=false SPSYNCAPI_LOG_LEVEL=debug go run . serve
+
+  run:prod:
+    desc: Start the API server with config.prod.yaml (PostgreSQL)
+    cmds:
+      - SPSYNCAPI_METRICS_ENABLED=false go run . serve --config config.prod.yaml
 
   test:
     desc: Run all tests
@@ -43,11 +49,29 @@ tasks:
       - go mod tidy
 
   temporal:up:
-    desc: Start Temporal server and UI via docker compose
+    desc: Start local Temporal (ephemeral start-dev) and UI
+    dir: ..
     cmds:
       - docker compose up -d temporal temporal-ui
 
+  temporal:up:prod:
+    desc: Start persisted Temporal + app Postgres (production compose)
+    dir: ..
+    cmds:
+      - "{{.COMPOSE_PROD}} up -d"
+
+  db:up:prod:
+    desc: Start application PostgreSQL only (production compose)
+    dir: ..
+    cmds:
+      - "{{.COMPOSE_PROD}} up -d app-postgresql"
+
   worker:
-    desc: Start the Temporal worker
+    desc: Start the Temporal worker (dev config, SQLite)
     cmds:
       - go run . worker
+
+  worker:prod:
+    desc: Start the Temporal worker with config.prod.yaml (PostgreSQL)
+    cmds:
+      - go run . worker --config config.prod.yaml

@@ -406,13 +406,17 @@ func (s *Service) syncSchedule(ctx context.Context, job *storage.BackupJob) erro
 	return nil
 }
 
-// usesRunStarterSchedule is true for one-time jobs executed via StartRun/StartRunAt (not Temporal schedules).
-func usesRunStarterSchedule(job *storage.BackupJob) bool {
+// UsesRunStarterSchedule is true for one-time jobs executed via StartRun/StartRunAt (not Temporal schedules).
+func UsesRunStarterSchedule(job *storage.BackupJob) bool {
 	if job.ScheduleOneTime != nil {
 		return true
 	}
 	return job.ScheduleIntervalSeconds == nil &&
 		(job.ScheduleCron == nil || strings.TrimSpace(*job.ScheduleCron) == "")
+}
+
+func usesRunStarterSchedule(job *storage.BackupJob) bool {
+	return UsesRunStarterSchedule(job)
 }
 
 func (s *Service) validateJobReferences(memberID string, cfg JobConfigInput) error {

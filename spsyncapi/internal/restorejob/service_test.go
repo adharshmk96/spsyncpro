@@ -41,7 +41,7 @@ func (m *mockRestoreRunStarter) StartRunAt(_ context.Context, _, jobID string, a
 func newTestRestoreJobService(t *testing.T, starter restorejob.RunStarter) (*restorejob.Service, string, string) {
 	t.Helper()
 
-	db, err := storage.Open("file::memory:")
+	db, err := storage.OpenSQLite("file::memory:")
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}

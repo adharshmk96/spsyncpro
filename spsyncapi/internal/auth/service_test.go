@@ -13,7 +13,7 @@ import (
 // openTestDB opens an in-memory SQLite database suitable for unit tests.
 func openTestDB(t *testing.T) *storage.MemberRepository {
 	t.Helper()
-	db, err := storage.Open("file::memory:?cache=shared&_busy_timeout=5000")
+	db, err := storage.OpenSQLite("file::memory:?cache=shared&_busy_timeout=5000")
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
@@ -24,7 +24,7 @@ func openTestDB(t *testing.T) *storage.MemberRepository {
 func newTestService(t *testing.T) *auth.Service {
 	t.Helper()
 
-	db, err := storage.Open("file::memory:")
+	db, err := storage.OpenSQLite("file::memory:")
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}

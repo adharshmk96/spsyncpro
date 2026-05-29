@@ -98,7 +98,13 @@ go run . serve --config /path/to/config.yaml
 | `metrics.otlp_endpoint` | `localhost:4318` | `SPSYNCAPI_METRICS_OTLP_ENDPOINT` |
 | `metrics.otlp_insecure` | `true` | `SPSYNCAPI_METRICS_OTLP_INSECURE` |
 | `metrics.export_interval` | `15s` | `SPSYNCAPI_METRICS_EXPORT_INTERVAL` |
+| `db.driver` | `sqlite` | `SPSYNCAPI_DB_DRIVER` |
 | `db.sqlite_path` | `./data/spsyncapi.sqlite` | `SPSYNCAPI_DB_SQLITE_PATH` |
+| `db.postgres_dsn` | *(see config.yaml)* | `SPSYNCAPI_DB_POSTGRES_DSN` |
+| `temporal.host_port` | `localhost:7233` | `SPSYNCAPI_TEMPORAL_HOST_PORT` |
+| `temporal.namespace` | `default` | `SPSYNCAPI_TEMPORAL_NAMESPACE` |
+| `temporal.task_queue` | `spsync-transfer` | `SPSYNCAPI_TEMPORAL_TASK_QUEUE` |
+| `temporal.reconcile_interval` | `2m` | `SPSYNCAPI_TEMPORAL_RECONCILE_INTERVAL` |
 | `auth.jwt_secret` | *(required)* | `SPSYNCAPI_AUTH_JWT_SECRET` |
 | `auth.jwt_issuer` | `spsyncapi` | `SPSYNCAPI_AUTH_JWT_ISSUER` |
 | `auth.access_token_ttl` | `15m` | `SPSYNCAPI_AUTH_ACCESS_TOKEN_TTL` |
@@ -133,7 +139,8 @@ go build -o bin/spsyncapi .
 │   ├── routes/          # Route registration
 │   ├── server/          # HTTP server setup and lifecycle
 │   └── telemetry/       # OpenTelemetry metrics setup
-├── config.yaml          # Example/default config
+├── config.yaml          # Local dev (SQLite)
+├── config.prod.yaml     # Production (PostgreSQL)
 ├── main.go              # Application entrypoint + API metadata
 ├── Taskfile.yml         # Task runner definitions
 └── go.mod
@@ -142,3 +149,51 @@ go build -o bin/spsyncapi .
 ## Graceful shutdown
 
 The server handles `SIGINT` and `SIGTERM`, draining in-flight requests before exit.
+
+## Environments: local dev vs production
+
+| | Local dev | Production / staging |
+|---|-----------|-------------------|
+| Compose file | [`docker-compose.yml`](../docker-compose.yml) | [`docker-compose.prod.yml`](../docker-compose.prod.yml) |
+| Temporal | Ephemeral `start-dev` (state lost on container restart) | PostgreSQL-backed `auto-setup` |
+| App database | SQLite (`config.yaml`) | PostgreSQL (`config.prod.yaml`) |
+
+### Local development
+
+From the **repository root**:
+
+```bash
+docker compose up -d temporal temporal-ui
+# or from spsyncapi/: task temporal:up
+```
+
+From **spsyncapi/** (uses `config.yaml` → SQLite):
+
+```bash
+task run      # API
+task worker   # Temporal worker + reconcile loop
+```
+
+Temporal UI: `http://localhost:8088` · gRPC: `localhost:7233`
+
+After Temporal restarts locally, the worker reconcile loop (default every `2m`) rebuilds schedules from SQLite. Restart the worker once if you need immediate recovery.
+
+### Production
+
+From the **repository root**:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+# or from spsyncapi/: task temporal:up:prod
+```
+
+From **spsyncapi/** (uses `config.prod.yaml` → PostgreSQL on port `5433`):
+
+```bash
+task run:prod
+task worker:prod
+```
+
+Override secrets and DSN via env vars (`SPSYNCAPI_DB_POSTGRES_DSN`, etc.) or a deployment-specific config file.
+
+Job definitions remain in the app database (source of truth). The worker reconciles to Temporal on startup and every `temporal.reconcile_interval`, including after Temporal cluster recovery.

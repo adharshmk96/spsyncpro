@@ -1,0 +1,68 @@
+# Production / staging: persisted Temporal and application PostgreSQL.
+# App: set db.driver=postgres and db.postgres_dsn (see spsyncapi/config.prod.yaml).
+services:
+  temporal-postgresql:
+    image: postgres:16-alpine
+    container_name: spsyncapi-temporal-postgresql
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+    volumes:
+      - temporal_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  temporal:
+    image: temporalio/auto-setup:1.29.0
+    container_name: spsyncapi-temporal
+    restart: unless-stopped
+    depends_on:
+      temporal-postgresql:
+        condition: service_healthy
+    environment:
+      DB: postgresql
+      DB_PORT: "5432"
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: temporal
+      POSTGRES_SEEDS: temporal-postgresql
+    ports:
+      - "7233:7233"
+
+  temporal-ui:
+    image: temporalio/ui:latest
+    container_name: spsyncapi-temporal-ui
+    restart: unless-stopped
+    depends_on:
+      temporal:
+        condition: service_started
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8088:8080"
+
+  app-postgresql:
+    image: postgres:16-alpine
+    container_name: spsyncapi-app-postgresql
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: spsync
+      POSTGRES_PASSWORD: spsync
+      POSTGRES_DB: spsyncapi
+    ports:
+      - "5433:5432"
+    volumes:
+      - app_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U spsync -d spsyncapi"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  temporal_pg_data:
+  app_pg_data:

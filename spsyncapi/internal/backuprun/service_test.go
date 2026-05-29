@@ -17,7 +17,7 @@ const testMemberA = "member-backup-run-a"
 func newTestBackupRunService(t *testing.T) (*backuprun.Service, *storage.BackupJobRepository, *storage.BackupRunRepository) {
 	t.Helper()
 
-	db, err := storage.Open("file::memory:")
+	db, err := storage.OpenSQLite("file::memory:")
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}

@@ -42,6 +42,16 @@ func (r *RestoreJobRepository) FindActiveByID(id, memberID string) (*RestoreJob,
 	return &job, nil
 }
 
+// ListAllActive returns all active restore jobs (startup reconciliation).
+func (r *RestoreJobRepository) ListAllActive() ([]RestoreJob, error) {
+	var jobs []RestoreJob
+	err := r.db.Where("active = ?", true).Find(&jobs).Error
+	if err != nil {
+		return nil, fmt.Errorf("restore job repo: list all active: %w", err)
+	}
+	return jobs, nil
+}
+
 // ListActive returns active restore jobs owned by memberID ordered by created date descending.
 func (r *RestoreJobRepository) ListActive(memberID string) ([]RestoreJob, error) {
 	var jobs []RestoreJob

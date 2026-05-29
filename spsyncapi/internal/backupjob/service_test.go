@@ -35,7 +35,7 @@ type testEnv struct {
 func newTestBackupJobEnv(t *testing.T) testEnv {
 	t.Helper()
 
-	db, err := storage.Open("file::memory:")
+	db, err := storage.OpenSQLite("file::memory:")
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}

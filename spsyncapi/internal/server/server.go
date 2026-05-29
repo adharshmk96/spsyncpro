@@ -46,7 +46,7 @@ func New(cfg *config.Config, logger *slog.Logger, metrics *telemetry.HTTPMetrics
 	}
 
 	// --- storage -----------------------------------------------------------
-	db, err := storage.Open(cfg.DB.SQLitePath)
+	db, err := storage.Open(cfg.DB)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}

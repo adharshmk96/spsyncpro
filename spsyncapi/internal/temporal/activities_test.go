@@ -13,7 +13,7 @@ import (
 )
 
 func TestTransferFilesBackupIdempotent(t *testing.T) {
-	db, err := storage.Open("file::memory:")
+	db, err := storage.OpenSQLite("file::memory:")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestTransferFilesBackupIdempotent(t *testing.T) {
 }
 
 func TestTransferFilesRestoreSetsJobLastRun(t *testing.T) {
-	db, err := storage.Open("file::memory:")
+	db, err := storage.OpenSQLite("file::memory:")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}

@@ -29,7 +29,7 @@ const testMemberA = "member-restore-run-a"
 func newTestRestoreRunService(t *testing.T) (*restorerun.Service, *storage.RestoreJobRepository, *storage.RestoreRunRepository) {
 	t.Helper()
 
-	db, err := storage.Open("file::memory:")
+	db, err := storage.OpenSQLite("file::memory:")
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestGetRestoreRunNotFound(t *testing.T) {
 }
 
 func TestStartRunSetsJobLastRun(t *testing.T) {
-	db, err := storage.Open("file::memory:")
+	db, err := storage.OpenSQLite("file::memory:")
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}

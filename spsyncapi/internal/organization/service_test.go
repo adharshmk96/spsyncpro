@@ -19,7 +19,7 @@ const (
 func newTestOrgService(t *testing.T) *organization.Service {
 	t.Helper()
 
-	db, err := storage.Open("file::memory:")
+	db, err := storage.OpenSQLite("file::memory:")
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}

@@ -17,14 +17,14 @@ metrics:
   export_interval: 15s
 
 db:
-  driver: sqlite
-  sqlite_path: ./data/spsyncapi2.sqlite
+  driver: postgres
+  postgres_dsn: "host=localhost port=5433 user=spsync password=spsync dbname=spsyncapi sslmode=disable"
 
 auth:
   jwt_secret: change-me-in-production
   jwt_issuer: spsyncapi
   access_token_ttl: 15m
-  session_ttl: 720h   # 30 days
+  session_ttl: 720h
   password_reset_ttl: 30m
 
 encryption:

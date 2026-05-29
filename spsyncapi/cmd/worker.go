@@ -29,7 +29,7 @@ var workerCmd = &cobra.Command{
 			Level: cfg.SlogLevel(),
 		}))
 
-		db, err := storage.Open(cfg.DB.SQLitePath)
+		db, err := storage.Open(cfg.DB)
 		if err != nil {
 			return fmt.Errorf("open database: %w", err)
 		}
@@ -48,18 +48,23 @@ var workerCmd = &cobra.Command{
 		scheduler := temporal.NewScheduleOrchestrator(temporalClient, cfg.Temporal, logger)
 		executor := temporal.NewRunExecutor(temporalClient, cfg.Temporal)
 
-		reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-		defer reconcileCancel()
-		if err := temporal.ReconcileOnStartup(reconcileCtx, temporal.ReconcileDeps{
+		reconcileDeps := temporal.ReconcileDeps{
 			BackupJobRepo:  backupJobRepo,
 			BackupRunRepo:  backupRunRepo,
+			RestoreJobRepo: restoreJobRepo,
 			RestoreRunRepo: restoreRunRepo,
 			Scheduler:      scheduler,
 			Executor:       executor,
+			TemporalClient: temporalClient,
 			Logger:         logger,
-		}); err != nil {
+		}
+
+		reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+		if err := temporal.ReconcileOnStartup(reconcileCtx, reconcileDeps); err != nil {
+			reconcileCancel()
 			return fmt.Errorf("startup reconciliation: %w", err)
 		}
+		reconcileCancel()
 
 		acts := &temporal.Activities{
 			BackupRunRepo:  backupRunRepo,
@@ -72,6 +77,11 @@ var workerCmd = &cobra.Command{
 
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
+
+		if cfg.Temporal.ReconcileInterval > 0 {
+			go temporal.RunReconcileLoop(ctx, reconcileDeps, cfg.Temporal.ReconcileInterval, logger)
+			logger.Info("temporal reconcile loop enabled", "interval", cfg.Temporal.ReconcileInterval)
+		}
 
 		logger.Info("starting temporal worker", "task_queue", cfg.Temporal.TaskQueue)
 		if err := w.Run(ctx); err != nil {
