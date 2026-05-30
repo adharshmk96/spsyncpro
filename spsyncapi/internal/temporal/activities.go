@@ -11,50 +11,38 @@ import (
 	"spsyncapi/internal/crypto"
 	"spsyncapi/internal/restorejob"
 	"spsyncapi/internal/storage"
+	"spsyncapi/pkg/azureblob"
+	"spsyncapi/pkg/graphapi"
 
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/temporal"
 )
 
 const (
-	defaultMetadataFetchDelay = 1 * time.Minute
-	defaultTransferDelay      = 30 * time.Second
-	metadataFileCount         = 100
+	syncFileMetadataPageActivityName = "SyncFileMetadataPage"
+	listPendingFileLogsActivityName  = "ListPendingFileLogs"
+	transferSingleFileActivityName   = "TransferSingleFile"
+	finalizeRunActivityName          = "FinalizeRun"
 )
 
-const (
-	fetchFileMetadataActivityName  = "FetchFileMetadata"
-	transferSingleFileActivityName = "TransferSingleFile"
-	finalizeRunActivityName        = "FinalizeRun"
-)
+// GraphServiceBuilder constructs a Graph client for a job. Used in tests.
+type GraphServiceBuilder func(jc jobContext) graphapi.Service
+
+// AzureServiceBuilder constructs an Azure Blob client for a job. Used in tests.
+type AzureServiceBuilder func(jc jobContext) azureblob.Service
 
 // Activities holds dependencies for Temporal activity implementations.
 type Activities struct {
-	BackupRunRepo      *storage.BackupRunRepository
-	RestoreRunRepo     *storage.RestoreRunRepository
-	BackupJobRepo      *storage.BackupJobRepository
-	RestoreJobRepo     *storage.RestoreJobRepository
-	OrgRepo            *storage.OrganizationRepository
-	BucketStoreRepo    *storage.BucketStoreRepository
-	Encryptor          *crypto.SecretEncryptor
-	Logger             *slog.Logger
-	MetadataFetchDelay time.Duration
-	TransferDelay      time.Duration
-}
-
-func (a *Activities) metadataFetchDelay() time.Duration {
-	if a.MetadataFetchDelay > 0 {
-		return a.MetadataFetchDelay
-	}
-	return defaultMetadataFetchDelay
-}
-
-func (a *Activities) transferDelay() time.Duration {
-	if a.TransferDelay > 0 {
-		return a.TransferDelay
-	}
-	return defaultTransferDelay
+	BackupRunRepo       *storage.BackupRunRepository
+	RestoreRunRepo      *storage.RestoreRunRepository
+	BackupJobRepo       *storage.BackupJobRepository
+	RestoreJobRepo      *storage.RestoreJobRepository
+	OrgRepo             *storage.OrganizationRepository
+	BucketStoreRepo     *storage.BucketStoreRepository
+	Encryptor           *crypto.SecretEncryptor
+	Logger              *slog.Logger
+	GraphServiceBuilder GraphServiceBuilder
+	AzureServiceBuilder AzureServiceBuilder
 }
 
 // CreateBackupRun inserts a backup run row for a scheduled execution.
@@ -100,75 +88,7 @@ func (a *Activities) CreateRestoreRun(ctx context.Context, in ScheduledBackupInp
 	return run.ID, nil
 }
 
-// FetchFileMetadata simulates discovering files to transfer and returns sample paths.
-func (a *Activities) FetchFileMetadata(ctx context.Context, in FetchFileMetadataInput) (FetchFileMetadataOutput, error) {
-	switch in.Kind {
-	case RunKindBackup:
-		return a.fetchBackupFileMetadata(ctx, in)
-	case RunKindRestore:
-		return a.fetchRestoreFileMetadata(ctx, in)
-	default:
-		return FetchFileMetadataOutput{}, fmt.Errorf("fetch file metadata activity: unknown kind %q", in.Kind)
-	}
-}
-
-func (a *Activities) fetchBackupFileMetadata(ctx context.Context, in FetchFileMetadataInput) (FetchFileMetadataOutput, error) {
-	run, err := a.BackupRunRepo.FindByID(in.RunID, in.MemberID)
-	if err != nil {
-		return FetchFileMetadataOutput{}, fmt.Errorf("fetch backup file metadata: find run: %w", err)
-	}
-	if run.EndAt != nil {
-		return FetchFileMetadataOutput{Paths: sampleFilePaths(in.JobID)}, nil
-	}
-
-	if run.StartAt == nil {
-		now := time.Now().UTC()
-		run.StartAt = &now
-		if err := a.BackupRunRepo.Update(run); err != nil {
-			return FetchFileMetadataOutput{}, fmt.Errorf("fetch backup file metadata: set start_at: %w", err)
-		}
-		if err := a.markBackupRunStarted(in.JobID, in.MemberID, now); err != nil {
-			return FetchFileMetadataOutput{}, err
-		}
-		recordHeartbeat(ctx, "fetching metadata")
-		if err := sleepOrCancel(ctx, a.metadataFetchDelay()); err != nil {
-			return FetchFileMetadataOutput{}, err
-		}
-	}
-
-	a.Logger.Info("backup file metadata fetched", "run_id", in.RunID, "file_count", metadataFileCount)
-	return FetchFileMetadataOutput{Paths: sampleFilePaths(in.JobID)}, nil
-}
-
-func (a *Activities) fetchRestoreFileMetadata(ctx context.Context, in FetchFileMetadataInput) (FetchFileMetadataOutput, error) {
-	run, err := a.RestoreRunRepo.FindByID(in.RunID, in.MemberID)
-	if err != nil {
-		return FetchFileMetadataOutput{}, fmt.Errorf("fetch restore file metadata: find run: %w", err)
-	}
-	if run.EndAt != nil {
-		return FetchFileMetadataOutput{Paths: sampleFilePaths(in.JobID)}, nil
-	}
-
-	if run.StartAt == nil {
-		now := time.Now().UTC()
-		run.StartAt = &now
-		if err := a.RestoreRunRepo.Update(run); err != nil {
-			return FetchFileMetadataOutput{}, fmt.Errorf("fetch restore file metadata: set start_at: %w", err)
-		}
-		if err := a.markRestoreRunStarted(in.JobID, in.MemberID, now); err != nil {
-			return FetchFileMetadataOutput{}, err
-		}
-		recordHeartbeat(ctx, "fetching metadata")
-		if err := sleepOrCancel(ctx, a.metadataFetchDelay()); err != nil {
-			return FetchFileMetadataOutput{}, err
-		}
-	}
-
-	a.Logger.Info("restore file metadata fetched", "run_id", in.RunID, "file_count", metadataFileCount)
-	return FetchFileMetadataOutput{Paths: sampleFilePaths(in.JobID)}, nil
-}
-
-// TransferSingleFile simulates transferring one file.
+// TransferSingleFile transfers one file between SharePoint and Azure Blob.
 func (a *Activities) TransferSingleFile(ctx context.Context, in TransferSingleFileInput) error {
 	switch in.Kind {
 	case RunKindBackup:
@@ -189,37 +109,61 @@ func (a *Activities) transferSingleBackupFile(ctx context.Context, in TransferSi
 		return nil
 	}
 
-	if err := a.logTransferContext(in.JobID, in.MemberID, in.Kind, in.FilePath); err != nil {
-		return err
-	}
-
-	existing, err := a.BackupRunRepo.FindFileTransferByRunAndPath(in.RunID, in.FilePath)
+	ft, err := a.BackupRunRepo.FindFileTransferByRunAndPath(in.RunID, in.File.Path)
 	if err != nil {
-		return fmt.Errorf("transfer backup file: find existing transfer: %w", err)
+		return fmt.Errorf("transfer backup file: find file log: %w", err)
 	}
-	if existing != nil {
+	if ft == nil {
+		return fmt.Errorf("transfer backup file: file log not found for path %q", in.File.Path)
+	}
+	if ft.Status == storage.FileLogStatusSuccess {
 		return nil
 	}
 
-	recordHeartbeat(ctx, in.FilePath)
-	start := time.Now().UTC()
-	if err := sleepOrCancel(ctx, a.transferDelay()); err != nil {
-		return err
+	jc, err := a.loadJobContext(in.JobID, in.MemberID, RunKindBackup)
+	if err != nil {
+		return fmt.Errorf("transfer backup file: %w", err)
 	}
-	end := time.Now().UTC()
 
-	ft := &storage.BackupRunFileTransfer{
-		ID:        uuid.NewString(),
-		RunID:     in.RunID,
-		FilePath:  in.FilePath,
-		StartAt:   &start,
-		EndAt:     &end,
-		CreatedAt: start,
+	graph := a.buildGraphClient(jc)
+	azure := a.buildAzureClient(jc)
+
+	start := time.Now().UTC()
+	ft.Status = storage.FileLogStatusPending
+	ft.StartAt = &start
+	ft.ErrorMessage = ""
+	if err := a.BackupRunRepo.UpdateFileTransfer(ft); err != nil {
+		return fmt.Errorf("transfer backup file: mark started: %w", err)
 	}
-	if err := a.BackupRunRepo.CreateFileTransfer(ft); err != nil {
-		return fmt.Errorf("transfer backup file: create transfer: %w", err)
+
+	recordHeartbeat(ctx, in.File.Path)
+
+	if _, err := graph.GetAccessToken(); err != nil {
+		return a.failBackupFileTransfer(ft, fmt.Errorf("transfer backup file: graph token: %w", err))
 	}
-	a.Logger.Info("backup file transferred", "run_id", in.RunID, "path", in.FilePath)
+
+	resp, err := graph.GetDriveItemDownload(in.File.DriveID, in.File.DriveItemID)
+	if err != nil {
+		return a.failBackupFileTransfer(ft, fmt.Errorf("transfer backup file: download from sharepoint: %w", err))
+	}
+	defer resp.Body.Close()
+
+	if err := azure.UploadBlob(jc.containerName, in.File.Path, resp); err != nil {
+		return a.failBackupFileTransfer(ft, fmt.Errorf("transfer backup file: upload to azure: %w", err))
+	}
+
+	end := time.Now().UTC()
+	ft.Status = storage.FileLogStatusSuccess
+	ft.EndAt = &end
+	if err := a.BackupRunRepo.UpdateFileTransfer(ft); err != nil {
+		return fmt.Errorf("transfer backup file: update transfer: %w", err)
+	}
+
+	a.Logger.Info("backup file transferred",
+		"run_id", in.RunID,
+		"path", in.File.Path,
+		"size", in.File.Size,
+	)
 	return nil
 }
 
@@ -232,37 +176,93 @@ func (a *Activities) transferSingleRestoreFile(ctx context.Context, in TransferS
 		return nil
 	}
 
-	if err := a.logTransferContext(in.JobID, in.MemberID, in.Kind, in.FilePath); err != nil {
-		return err
-	}
-
-	existing, err := a.RestoreRunRepo.FindFileTransferByRunAndPath(in.RunID, in.FilePath)
+	ft, err := a.RestoreRunRepo.FindFileTransferByRunAndPath(in.RunID, in.File.Path)
 	if err != nil {
-		return fmt.Errorf("transfer restore file: find existing transfer: %w", err)
+		return fmt.Errorf("transfer restore file: find file log: %w", err)
 	}
-	if existing != nil {
+	if ft == nil {
+		return fmt.Errorf("transfer restore file: file log not found for path %q", in.File.Path)
+	}
+	if ft.Status == storage.FileLogStatusSuccess {
 		return nil
 	}
 
-	recordHeartbeat(ctx, in.FilePath)
-	start := time.Now().UTC()
-	if err := sleepOrCancel(ctx, a.transferDelay()); err != nil {
-		return err
+	jc, err := a.loadJobContext(in.JobID, in.MemberID, RunKindRestore)
+	if err != nil {
+		return fmt.Errorf("transfer restore file: %w", err)
 	}
-	end := time.Now().UTC()
 
-	ft := &storage.RestoreRunFileTransfer{
-		ID:        uuid.NewString(),
-		RunID:     in.RunID,
-		FilePath:  in.FilePath,
-		StartAt:   &start,
-		EndAt:     &end,
-		CreatedAt: start,
+	graph := a.buildGraphClient(jc)
+	azure := a.buildAzureClient(jc)
+
+	start := time.Now().UTC()
+	ft.Status = storage.FileLogStatusPending
+	ft.StartAt = &start
+	ft.ErrorMessage = ""
+	if err := a.RestoreRunRepo.UpdateFileTransfer(ft); err != nil {
+		return fmt.Errorf("transfer restore file: mark started: %w", err)
 	}
-	if err := a.RestoreRunRepo.CreateFileTransfer(ft); err != nil {
-		return fmt.Errorf("transfer restore file: create transfer: %w", err)
+
+	recordHeartbeat(ctx, in.File.Path)
+
+	documentLibrary, libraryPath := splitRestorePath(in.File.Path)
+
+	if _, err := graph.GetAccessToken(); err != nil {
+		return a.failRestoreFileTransfer(ft, fmt.Errorf("transfer restore file: graph token: %w", err))
 	}
-	a.Logger.Info("restore file transferred", "run_id", in.RunID, "path", in.FilePath)
+
+	siteID, err := graph.GetSiteId(jc.sharePointSite)
+	if err != nil {
+		return a.failRestoreFileTransfer(ft, fmt.Errorf("transfer restore file: site id: %w", err))
+	}
+
+	driveID, err := graph.GetDriveId(siteID, documentLibrary)
+	if errors.Is(err, graphapi.ErrDriveNotFound) {
+		if _, createErr := graph.CreateDocumentLibrary(siteID, documentLibrary); createErr != nil {
+			return a.failRestoreFileTransfer(ft, fmt.Errorf("transfer restore file: create document library: %w", createErr))
+		}
+		driveID, err = graph.GetDriveId(siteID, documentLibrary)
+	}
+	if err != nil {
+		return a.failRestoreFileTransfer(ft, fmt.Errorf("transfer restore file: drive id: %w", err))
+	}
+
+	download, err := azure.DownloadBlobToStream(jc.containerName, in.File.Path)
+	if err != nil {
+		return a.failRestoreFileTransfer(ft, fmt.Errorf("transfer restore file: download from azure: %w", err))
+	}
+	defer download.Body.Close()
+
+	var contentLength int64
+	if download.ContentLength != nil {
+		contentLength = *download.ContentLength
+	}
+
+	if contentLength > 0 && contentLength < chunkUploadThreshold {
+		if err := graph.UploadDriveItemWhole(driveID, libraryPath, download.Body); err != nil {
+			return a.failRestoreFileTransfer(ft, fmt.Errorf("transfer restore file: upload whole: %w", err))
+		}
+	} else {
+		if contentLength == 0 {
+			contentLength = in.File.Size
+		}
+		if err := graph.UploadDriveItemChunked(driveID, libraryPath, contentLength, download.Body); err != nil {
+			return a.failRestoreFileTransfer(ft, fmt.Errorf("transfer restore file: upload chunked: %w", err))
+		}
+	}
+
+	end := time.Now().UTC()
+	ft.Status = storage.FileLogStatusSuccess
+	ft.EndAt = &end
+	if err := a.RestoreRunRepo.UpdateFileTransfer(ft); err != nil {
+		return fmt.Errorf("transfer restore file: update transfer: %w", err)
+	}
+
+	a.Logger.Info("restore file transferred",
+		"run_id", in.RunID,
+		"path", in.File.Path,
+		"size", contentLength,
+	)
 	return nil
 }
 
@@ -277,7 +277,7 @@ func (a *Activities) FinalizeRun(ctx context.Context, in FinalizeRunInput) error
 		if run.EndAt != nil {
 			return nil
 		}
-		return a.finalizeBackupRun(ctx, run, false)
+		return a.finalizeBackupRun(run)
 	case RunKindRestore:
 		run, err := a.RestoreRunRepo.FindByID(in.RunID, in.MemberID)
 		if err != nil {
@@ -286,118 +286,13 @@ func (a *Activities) FinalizeRun(ctx context.Context, in FinalizeRunInput) error
 		if run.EndAt != nil {
 			return nil
 		}
-		return a.finalizeRestoreRun(ctx, run, false)
+		return a.finalizeRestoreRun(run)
 	default:
 		return fmt.Errorf("finalize run activity: unknown kind %q", in.Kind)
 	}
 }
 
-type transferContext struct {
-	organizationID string
-	tenantID       string
-	tenantSecret   string
-	bucketName     string
-	bucketType     string
-	bucketConfig   string
-}
-
-func (a *Activities) loadTransferContext(jobID, memberID string, kind RunKind) (transferContext, error) {
-	var orgID, bucketStoreID string
-
-	switch kind {
-	case RunKindBackup:
-		job, err := a.BackupJobRepo.FindActiveByID(jobID, memberID)
-		if err != nil {
-			return transferContext{}, fmt.Errorf("load transfer context: backup job: %w", err)
-		}
-		orgID = job.OrganizationID
-		bucketStoreID = job.BucketStoreID
-	case RunKindRestore:
-		job, err := a.RestoreJobRepo.FindActiveByID(jobID, memberID)
-		if err != nil {
-			return transferContext{}, fmt.Errorf("load transfer context: restore job: %w", err)
-		}
-		orgID = job.OrganizationID
-		bucketStoreID = job.BucketStoreID
-	default:
-		return transferContext{}, fmt.Errorf("load transfer context: unknown kind %q", kind)
-	}
-
-	org, err := a.OrgRepo.FindActiveByID(orgID, memberID)
-	if err != nil {
-		return transferContext{}, fmt.Errorf("load transfer context: organization: %w", err)
-	}
-
-	tenantSecret, err := a.Encryptor.Decrypt(org.TenantSecretEncrypted)
-	if err != nil {
-		return transferContext{}, fmt.Errorf("load transfer context: decrypt tenant secret: %w", err)
-	}
-
-	bucket, err := a.BucketStoreRepo.FindActiveByID(bucketStoreID, memberID)
-	if err != nil {
-		return transferContext{}, fmt.Errorf("load transfer context: bucket store: %w", err)
-	}
-
-	bucketConfig, err := a.Encryptor.Decrypt(bucket.ConfigEncrypted)
-	if err != nil {
-		return transferContext{}, fmt.Errorf("load transfer context: decrypt bucket config: %w", err)
-	}
-
-	return transferContext{
-		organizationID: org.ID,
-		tenantID:       org.TenantID,
-		tenantSecret:   tenantSecret,
-		bucketName:     bucket.BucketName,
-		bucketType:     bucket.BucketType,
-		bucketConfig:   bucketConfig,
-	}, nil
-}
-
-// logTransferContext logs org/tenant/bucket connection details for simulation.
-// Production transfers should log IDs only, not decrypted secrets.
-func (a *Activities) logTransferContext(jobID, memberID string, kind RunKind, filePath string) error {
-	tc, err := a.loadTransferContext(jobID, memberID, kind)
-	if err != nil {
-		return err
-	}
-
-	a.Logger.Info("simulated file transfer context",
-		"file_path", filePath,
-		"organization_id", tc.organizationID,
-		"tenant_id", tc.tenantID,
-		"tenant_secret", tc.tenantSecret,
-		"bucket_name", tc.bucketName,
-		"bucket_type", tc.bucketType,
-		"bucket_config", tc.bucketConfig,
-	)
-	return nil
-}
-
-func sampleFilePaths(jobID string) []string {
-	paths := make([]string, metadataFileCount)
-	for i := 1; i <= metadataFileCount; i++ {
-		paths[i-1] = DummyFilePath(jobID, i)
-	}
-	return paths
-}
-
-func (a *Activities) finalizeBackupRun(ctx context.Context, run *storage.BackupRun, cancelled bool) error {
-	if err := ctx.Err(); err != nil && cancelled {
-		now := time.Now().UTC()
-		run.EndAt = &now
-		if updateErr := a.BackupRunRepo.Update(run); updateErr != nil {
-			return fmt.Errorf("finalize backup run: %w", updateErr)
-		}
-		return temporal.NewCanceledError("backup run stopped")
-	}
-	if cancelled {
-		now := time.Now().UTC()
-		run.EndAt = &now
-		if err := a.BackupRunRepo.Update(run); err != nil {
-			return fmt.Errorf("finalize backup run: %w", err)
-		}
-		return temporal.NewCanceledError("backup run stopped")
-	}
+func (a *Activities) finalizeBackupRun(run *storage.BackupRun) error {
 	now := time.Now().UTC()
 	run.EndAt = &now
 	if err := a.BackupRunRepo.Update(run); err != nil {
@@ -406,23 +301,7 @@ func (a *Activities) finalizeBackupRun(ctx context.Context, run *storage.BackupR
 	return nil
 }
 
-func (a *Activities) finalizeRestoreRun(ctx context.Context, run *storage.RestoreRun, cancelled bool) error {
-	if err := ctx.Err(); err != nil && cancelled {
-		now := time.Now().UTC()
-		run.EndAt = &now
-		if updateErr := a.RestoreRunRepo.Update(run); updateErr != nil {
-			return fmt.Errorf("finalize restore run: %w", updateErr)
-		}
-		return temporal.NewCanceledError("restore run stopped")
-	}
-	if cancelled {
-		now := time.Now().UTC()
-		run.EndAt = &now
-		if err := a.RestoreRunRepo.Update(run); err != nil {
-			return fmt.Errorf("finalize restore run: %w", err)
-		}
-		return temporal.NewCanceledError("restore run stopped")
-	}
+func (a *Activities) finalizeRestoreRun(run *storage.RestoreRun) error {
 	now := time.Now().UTC()
 	run.EndAt = &now
 	if err := a.RestoreRunRepo.Update(run); err != nil {
@@ -461,24 +340,14 @@ func recordHeartbeat(ctx context.Context, details interface{}) {
 	}
 }
 
-func sleepOrCancel(ctx context.Context, d time.Duration) error {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
-
 // Register wires activity methods on the worker.
 func (a *Activities) Register(w interface {
 	RegisterActivityWithOptions(fn interface{}, opts activity.RegisterOptions)
 }) {
 	w.RegisterActivityWithOptions(a.CreateBackupRun, activity.RegisterOptions{Name: "CreateBackupRun"})
 	w.RegisterActivityWithOptions(a.CreateRestoreRun, activity.RegisterOptions{Name: "CreateRestoreRun"})
-	w.RegisterActivityWithOptions(a.FetchFileMetadata, activity.RegisterOptions{Name: fetchFileMetadataActivityName})
+	w.RegisterActivityWithOptions(a.SyncFileMetadataPage, activity.RegisterOptions{Name: syncFileMetadataPageActivityName})
+	w.RegisterActivityWithOptions(a.ListPendingFileLogs, activity.RegisterOptions{Name: listPendingFileLogsActivityName})
 	w.RegisterActivityWithOptions(a.TransferSingleFile, activity.RegisterOptions{Name: transferSingleFileActivityName})
 	w.RegisterActivityWithOptions(a.FinalizeRun, activity.RegisterOptions{Name: finalizeRunActivityName})
 }

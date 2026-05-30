@@ -117,6 +117,9 @@ export default function DashboardRestoreRunLogPage() {
                 <thead>
                   <tr className="border-b">
                     <th className="px-3 py-2 font-medium">File path</th>
+                    <th className="px-3 py-2 font-medium">Status</th>
+                    <th className="px-3 py-2 font-medium">Library</th>
+                    <th className="px-3 py-2 font-medium">Size</th>
                     <th className="px-3 py-2 font-medium">Start at</th>
                     <th className="px-3 py-2 font-medium">End at</th>
                   </tr>
@@ -125,6 +128,11 @@ export default function DashboardRestoreRunLogPage() {
                   {files.map((file, index) => (
                     <tr key={`${file.file_path}-${index}`} className="border-b last:border-b-0">
                       <td className="px-3 py-2 break-all">{file.file_path}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{file.status}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{file.drive_name ?? "—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {file.size != null ? file.size.toLocaleString() : "—"}
+                      </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         {formatDateTime(file.start_at)}
                       </td>

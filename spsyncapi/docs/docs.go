@@ -2067,19 +2067,34 @@ const docTemplate = `{
                 },
                 "one_time": {
                     "type": "string"
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         },
         "backuprun.FileTransferDetails": {
             "type": "object",
             "properties": {
+                "drive_name": {
+                    "type": "string"
+                },
                 "end_at": {
+                    "type": "string"
+                },
+                "error_message": {
                     "type": "string"
                 },
                 "file_path": {
                     "type": "string"
                 },
+                "size": {
+                    "type": "integer"
+                },
                 "start_at": {
+                    "type": "string"
+                },
+                "status": {
                     "type": "string"
                 }
             }
@@ -2216,6 +2231,9 @@ const docTemplate = `{
                 },
                 "one_time": {
                     "type": "string"
+                },
+                "type": {
+                    "type": "string"
                 }
             }
         },
@@ -2253,6 +2271,9 @@ const docTemplate = `{
         "handlers.backupRunStartResponse": {
             "type": "object",
             "properties": {
+                "backup_job": {
+                    "$ref": "#/definitions/backupjob.BackupJobDetails"
+                },
                 "backup_run": {
                     "$ref": "#/definitions/backuprun.RunDetails"
                 }
@@ -2307,12 +2328,6 @@ const docTemplate = `{
                 },
                 "job_config": {
                     "$ref": "#/definitions/handlers.backupJobConfigRequest"
-                },
-                "last_run": {
-                    "type": "string"
-                },
-                "next_run": {
-                    "type": "string"
                 },
                 "schedule": {
                     "$ref": "#/definitions/handlers.backupJobScheduleRequest"
@@ -2378,9 +2393,6 @@ const docTemplate = `{
                 },
                 "job_config": {
                     "$ref": "#/definitions/handlers.restoreJobConfigRequest"
-                },
-                "last_run": {
-                    "type": "string"
                 },
                 "start_at": {
                     "type": "string"
@@ -2563,6 +2575,9 @@ const docTemplate = `{
         "handlers.restoreRunStartResponse": {
             "type": "object",
             "properties": {
+                "restore_job": {
+                    "$ref": "#/definitions/restorejob.RestoreJobDetails"
+                },
                 "restore_run": {
                     "$ref": "#/definitions/restorerun.RunDetails"
                 }
@@ -2599,12 +2614,6 @@ const docTemplate = `{
                 },
                 "job_config": {
                     "$ref": "#/definitions/handlers.backupJobConfigRequest"
-                },
-                "last_run": {
-                    "type": "string"
-                },
-                "next_run": {
-                    "type": "string"
                 },
                 "schedule": {
                     "$ref": "#/definitions/handlers.backupJobScheduleRequest"
@@ -2668,9 +2677,6 @@ const docTemplate = `{
                 },
                 "job_config": {
                     "$ref": "#/definitions/handlers.restoreJobConfigRequest"
-                },
-                "last_run": {
-                    "type": "string"
                 },
                 "start_at": {
                     "type": "string"
@@ -2743,13 +2749,25 @@ const docTemplate = `{
         "restorerun.FileTransferDetails": {
             "type": "object",
             "properties": {
+                "drive_name": {
+                    "type": "string"
+                },
                 "end_at": {
+                    "type": "string"
+                },
+                "error_message": {
                     "type": "string"
                 },
                 "file_path": {
                     "type": "string"
                 },
+                "size": {
+                    "type": "integer"
+                },
                 "start_at": {
+                    "type": "string"
+                },
+                "status": {
                     "type": "string"
                 }
             }

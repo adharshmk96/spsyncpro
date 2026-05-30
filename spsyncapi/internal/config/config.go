@@ -26,10 +26,11 @@ type Config struct {
 
 // TemporalConfig holds Temporal client and worker settings.
 type TemporalConfig struct {
-	HostPort           string
-	Namespace          string
-	TaskQueue          string
-	ReconcileInterval  time.Duration
+	HostPort               string
+	Namespace              string
+	TaskQueue              string
+	ReconcileInterval      time.Duration
+	MaxConcurrentTransfers int
 }
 
 // DBConfig holds database connection settings.
@@ -96,10 +97,11 @@ func Load() (*Config, error) {
 			Secret: viper.GetString("encryption.secret"),
 		},
 		Temporal: TemporalConfig{
-			HostPort:          viper.GetString("temporal.host_port"),
-			Namespace:         viper.GetString("temporal.namespace"),
-			TaskQueue:         viper.GetString("temporal.task_queue"),
-			ReconcileInterval: viper.GetDuration("temporal.reconcile_interval"),
+			HostPort:               viper.GetString("temporal.host_port"),
+			Namespace:              viper.GetString("temporal.namespace"),
+			TaskQueue:              viper.GetString("temporal.task_queue"),
+			ReconcileInterval:      viper.GetDuration("temporal.reconcile_interval"),
+			MaxConcurrentTransfers: viper.GetInt("temporal.max_concurrent_transfers"),
 		},
 	}
 
@@ -134,6 +136,7 @@ func setDefaults() {
 	viper.SetDefault("temporal.namespace", "default")
 	viper.SetDefault("temporal.task_queue", "spsync-transfer")
 	viper.SetDefault("temporal.reconcile_interval", 2*time.Minute)
+	viper.SetDefault("temporal.max_concurrent_transfers", 5)
 }
 
 func (e *EncryptionConfig) validate() error {
@@ -225,6 +228,9 @@ func (t *TemporalConfig) validate() error {
 	}
 	if t.ReconcileInterval < 0 {
 		return fmt.Errorf("invalid temporal.reconcile_interval: %s", t.ReconcileInterval)
+	}
+	if t.MaxConcurrentTransfers < 0 {
+		return fmt.Errorf("invalid temporal.max_concurrent_transfers: %d", t.MaxConcurrentTransfers)
 	}
 	return nil
 }

@@ -63,7 +63,6 @@ func Reconcile(ctx context.Context, deps ReconcileDeps) error {
 			JobID:    run.JobID,
 			MemberID: run.MemberID,
 			Kind:     RunKindBackup,
-			Resume:   true,
 		}); err != nil {
 			deps.Logger.Error("reconcile: resume backup run", "run_id", run.ID, "error", err)
 		}
@@ -80,7 +79,6 @@ func Reconcile(ctx context.Context, deps ReconcileDeps) error {
 			JobID:    run.JobID,
 			MemberID: run.MemberID,
 			Kind:     RunKindRestore,
-			Resume:   true,
 		}); err != nil {
 			deps.Logger.Error("reconcile: resume restore run", "run_id", run.ID, "error", err)
 		}
@@ -124,7 +122,6 @@ func reconcileRunStarterBackupJob(ctx context.Context, deps ReconcileDeps, job *
 			JobID:    job.ID,
 			MemberID: job.MemberID,
 			Kind:     RunKindBackup,
-			Resume:   true,
 		})
 	}
 
@@ -148,7 +145,6 @@ func reconcileRunStarterBackupJob(ctx context.Context, deps ReconcileDeps, job *
 		JobID:    job.ID,
 		MemberID: job.MemberID,
 		Kind:     RunKindBackup,
-		Resume:   true,
 	}
 	if at.After(time.Now().UTC()) {
 		return deps.Executor.StartBackupRunAt(ctx, in, at)
@@ -189,7 +185,6 @@ func reconcileRestoreJob(ctx context.Context, deps ReconcileDeps, job *storage.R
 			JobID:    job.ID,
 			MemberID: job.MemberID,
 			Kind:     RunKindRestore,
-			Resume:   true,
 		})
 	}
 
@@ -212,7 +207,6 @@ func reconcileRestoreJob(ctx context.Context, deps ReconcileDeps, job *storage.R
 		JobID:    job.ID,
 		MemberID: job.MemberID,
 		Kind:     RunKindRestore,
-		Resume:   true,
 	}
 
 	if job.StartAt != nil {

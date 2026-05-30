@@ -4,3 +4,4 @@ spsyncapi/bin/
 spsyncui/.next/
 spsyncui/node_modules/
 spsyncapikt
+.DS_Store

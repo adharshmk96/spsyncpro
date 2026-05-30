@@ -15,26 +15,29 @@ import (
 
 // RunExecutor starts and stops Temporal workflows for backup/restore runs.
 type RunExecutor struct {
-	client    client.Client
-	taskQueue string
+	client                 client.Client
+	taskQueue              string
+	maxConcurrentTransfers int
 }
 
 // NewRunExecutor constructs a RunExecutor.
 func NewRunExecutor(c client.Client, cfg config.TemporalConfig) *RunExecutor {
-	return &RunExecutor{client: c, taskQueue: cfg.TaskQueue}
+	return &RunExecutor{
+		client:                 c,
+		taskQueue:              cfg.TaskQueue,
+		maxConcurrentTransfers: cfg.MaxConcurrentTransfers,
+	}
 }
 
 // StartBackupRun starts a backup run workflow for an existing run row.
 func (e *RunExecutor) StartBackupRun(ctx context.Context, in RunWorkflowInput) error {
 	in.Kind = RunKindBackup
-	in.Resume = true
 	return e.startRun(ctx, BackupWorkflowID(in.RunID), BackupRunWorkflow, in, 0)
 }
 
 // StartBackupRunAt starts a backup run workflow at or after the given time.
 func (e *RunExecutor) StartBackupRunAt(ctx context.Context, in RunWorkflowInput, at time.Time) error {
 	in.Kind = RunKindBackup
-	in.Resume = true
 	delay := time.Until(at.UTC())
 	if delay < 0 {
 		delay = 0
@@ -45,14 +48,12 @@ func (e *RunExecutor) StartBackupRunAt(ctx context.Context, in RunWorkflowInput,
 // StartRestoreRun starts a restore run workflow for an existing run row.
 func (e *RunExecutor) StartRestoreRun(ctx context.Context, in RunWorkflowInput) error {
 	in.Kind = RunKindRestore
-	in.Resume = true
 	return e.startRun(ctx, RestoreWorkflowID(in.RunID), RestoreRunWorkflow, in, 0)
 }
 
 // StartRestoreRunAt starts a restore run workflow at or after the given time.
 func (e *RunExecutor) StartRestoreRunAt(ctx context.Context, in RunWorkflowInput, at time.Time) error {
 	in.Kind = RunKindRestore
-	in.Resume = true
 	delay := time.Until(at.UTC())
 	if delay < 0 {
 		delay = 0
@@ -61,6 +62,9 @@ func (e *RunExecutor) StartRestoreRunAt(ctx context.Context, in RunWorkflowInput
 }
 
 func (e *RunExecutor) startRun(ctx context.Context, workflowID string, workflow interface{}, in RunWorkflowInput, startDelay time.Duration) error {
+	if in.MaxConcurrentTransfers == 0 {
+		in.MaxConcurrentTransfers = e.maxConcurrentTransfers
+	}
 	opts := client.StartWorkflowOptions{
 		ID:                    workflowID,
 		TaskQueue:             e.taskQueue,
@@ -103,7 +107,9 @@ func (e *RunExecutor) ResumeBackupRunIfNeeded(ctx context.Context, in RunWorkflo
 		}
 	}
 	in.Kind = RunKindBackup
-	in.Resume = true
+	if in.MaxConcurrentTransfers == 0 {
+		in.MaxConcurrentTransfers = e.maxConcurrentTransfers
+	}
 	_, err = e.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    workflowID,
 		TaskQueue:             e.taskQueue,
@@ -128,7 +134,9 @@ func (e *RunExecutor) ResumeRestoreRunIfNeeded(ctx context.Context, in RunWorkfl
 		}
 	}
 	in.Kind = RunKindRestore
-	in.Resume = true
+	if in.MaxConcurrentTransfers == 0 {
+		in.MaxConcurrentTransfers = e.maxConcurrentTransfers
+	}
 	_, err = e.client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:                    workflowID,
 		TaskQueue:             e.taskQueue,

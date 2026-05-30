@@ -39,11 +39,15 @@ type RunDetails struct {
 	EndAt   *time.Time `json:"end_at,omitempty"`
 }
 
-// FileTransferDetails is the API representation of a file transfer within a run.
+// FileTransferDetails is the API representation of a per-file run log entry.
 type FileTransferDetails struct {
-	FilePath string     `json:"file_path"`
-	StartAt  *time.Time `json:"start_at,omitempty"`
-	EndAt    *time.Time `json:"end_at,omitempty"`
+	FilePath     string     `json:"file_path"`
+	Status       string     `json:"status"`
+	DriveName    string     `json:"drive_name,omitempty"`
+	Size         int64      `json:"size,omitempty"`
+	ErrorMessage string     `json:"error_message,omitempty"`
+	StartAt      *time.Time `json:"start_at,omitempty"`
+	EndAt        *time.Time `json:"end_at,omitempty"`
 }
 
 // ListResult holds a paginated list of backup runs.
@@ -130,7 +134,6 @@ func (s *Service) StartRun(ctx context.Context, memberID, jobID string) (*StartR
 		RunID:    run.ID,
 		JobID:    jobID,
 		MemberID: memberID,
-		Resume:   true,
 	}); err != nil {
 		return nil, fmt.Errorf("backup run service: start workflow: %w", err)
 	}
@@ -175,7 +178,6 @@ func (s *Service) StartRunAt(ctx context.Context, memberID, jobID string, at tim
 		RunID:    run.ID,
 		JobID:    jobID,
 		MemberID: memberID,
-		Resume:   true,
 	}
 	if err := s.executor.StartBackupRunAt(ctx, in, at); err != nil {
 		return nil, fmt.Errorf("backup run service: start workflow: %w", err)
@@ -326,8 +328,22 @@ func toRunDetails(run *storage.BackupRun) RunDetails {
 
 func toFileTransferDetails(ft *storage.BackupRunFileTransfer) FileTransferDetails {
 	return FileTransferDetails{
-		FilePath: ft.FilePath,
-		StartAt:  ft.StartAt,
-		EndAt:    ft.EndAt,
+		FilePath:     ft.FilePath,
+		Status:       effectiveFileLogStatus(ft.Status, ft.EndAt),
+		DriveName:    ft.DriveName,
+		Size:         ft.Size,
+		ErrorMessage: ft.ErrorMessage,
+		StartAt:      ft.StartAt,
+		EndAt:        ft.EndAt,
 	}
+}
+
+func effectiveFileLogStatus(status string, endAt *time.Time) string {
+	if status != "" {
+		return status
+	}
+	if endAt != nil {
+		return storage.FileLogStatusSuccess
+	}
+	return storage.FileLogStatusPending
 }

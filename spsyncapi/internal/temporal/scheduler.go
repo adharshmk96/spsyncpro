@@ -15,17 +15,19 @@ import (
 
 // ScheduleOrchestrator syncs backup jobs to Temporal schedules.
 type ScheduleOrchestrator struct {
-	client    client.Client
-	taskQueue string
-	logger    *slog.Logger
+	client                 client.Client
+	taskQueue              string
+	maxConcurrentTransfers int
+	logger                 *slog.Logger
 }
 
 // NewScheduleOrchestrator constructs a ScheduleOrchestrator.
 func NewScheduleOrchestrator(c client.Client, cfg config.TemporalConfig, logger *slog.Logger) *ScheduleOrchestrator {
 	return &ScheduleOrchestrator{
-		client:    c,
-		taskQueue: cfg.TaskQueue,
-		logger:    logger,
+		client:                 c,
+		taskQueue:              cfg.TaskQueue,
+		maxConcurrentTransfers: cfg.MaxConcurrentTransfers,
+		logger:                 logger,
 	}
 }
 
@@ -44,8 +46,12 @@ func (o *ScheduleOrchestrator) SyncJob(ctx context.Context, job *storage.BackupJ
 	}
 
 	action := &client.ScheduleWorkflowAction{
-		Workflow:  ScheduledBackupWorkflow,
-		Args:      []interface{}{ScheduledBackupInput{JobID: job.ID, MemberID: job.MemberID}},
+		Workflow: ScheduledBackupWorkflow,
+		Args: []interface{}{ScheduledBackupInput{
+			JobID:                  job.ID,
+			MemberID:               job.MemberID,
+			MaxConcurrentTransfers: o.maxConcurrentTransfers,
+		}},
 		TaskQueue: o.taskQueue,
 	}
 

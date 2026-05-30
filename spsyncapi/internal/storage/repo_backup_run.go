@@ -80,6 +80,14 @@ func (r *BackupRunRepository) CreateFileTransfer(ft *BackupRunFileTransfer) erro
 	return nil
 }
 
+// UpdateFileTransfer persists changes to a file transfer row.
+func (r *BackupRunRepository) UpdateFileTransfer(ft *BackupRunFileTransfer) error {
+	if err := r.db.Save(ft).Error; err != nil {
+		return fmt.Errorf("backup run repo: update file transfer: %w", err)
+	}
+	return nil
+}
+
 // FindByID returns a backup run owned by memberID.
 func (r *BackupRunRepository) FindByID(id, memberID string) (*BackupRun, error) {
 	var run BackupRun
@@ -128,4 +136,55 @@ func (r *BackupRunRepository) ListFileTransfers(runID string, offset, limit int)
 		return nil, 0, fmt.Errorf("backup run repo: list file transfers: %w", err)
 	}
 	return transfers, total, nil
+}
+
+// UpsertFileLog inserts a file log row or no-ops when the path already exists for the run.
+func (r *BackupRunRepository) UpsertFileLog(ft *BackupRunFileTransfer) error {
+	existing, err := r.FindFileTransferByRunAndPath(ft.RunID, ft.FilePath)
+	if err != nil {
+		return err
+	}
+	if existing != nil {
+		return nil
+	}
+	return r.CreateFileTransfer(ft)
+}
+
+// ListFileLogsByStatus returns file logs for a run filtered by status values.
+func (r *BackupRunRepository) ListFileLogsByStatus(runID string, statuses []string, offset, limit int) ([]BackupRunFileTransfer, error) {
+	var transfers []BackupRunFileTransfer
+	err := r.db.Where("run_id = ? AND status IN ?", runID, statuses).
+		Order("file_path ASC").
+		Offset(offset).
+		Limit(limit).
+		Find(&transfers).Error
+	if err != nil {
+		return nil, fmt.Errorf("backup run repo: list file logs by status: %w", err)
+	}
+	return transfers, nil
+}
+
+// CountFileLogsByStatus returns the number of file logs for a run with the given statuses.
+func (r *BackupRunRepository) CountFileLogsByStatus(runID string, statuses []string) (int64, error) {
+	var count int64
+	err := r.db.Model(&BackupRunFileTransfer{}).
+		Where("run_id = ? AND status IN ?", runID, statuses).
+		Count(&count).Error
+	if err != nil {
+		return 0, fmt.Errorf("backup run repo: count file logs by status: %w", err)
+	}
+	return count, nil
+}
+
+// UpdateMetadataSyncState updates metadata sync progress fields on a backup run.
+func (r *BackupRunRepository) UpdateMetadataSyncState(runID, status, checkpoint, errMsg string) error {
+	updates := map[string]interface{}{
+		"metadata_sync_status": status,
+		"metadata_sync_checkpoint": checkpoint,
+		"metadata_sync_error": errMsg,
+	}
+	if err := r.db.Model(&BackupRun{}).Where("id = ?", runID).Updates(updates).Error; err != nil {
+		return fmt.Errorf("backup run repo: update metadata sync state: %w", err)
+	}
+	return nil
 }
