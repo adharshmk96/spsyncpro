@@ -35,3 +35,4 @@ temporal:
   namespace: default
   task_queue: spsync-transfer
   reconcile_interval: 2m
+  max_concurrent_transfers: 5

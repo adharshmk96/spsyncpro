@@ -22,11 +22,3 @@ func TestWorkflowIDs(t *testing.T) {
 		t.Fatalf("RestoreWorkflowID() = %q", got)
 	}
 }
-
-func TestDummyFilePath(t *testing.T) {
-	got := temporal.DummyFilePath("job-abc", 3)
-	want := "/dummy/job-abc/file-3.txt"
-	if got != want {
-		t.Fatalf("DummyFilePath() = %q, want %q", got, want)
-	}
-}

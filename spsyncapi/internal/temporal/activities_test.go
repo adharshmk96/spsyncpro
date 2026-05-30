@@ -1,22 +1,154 @@
 package temporal
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"spsyncapi/internal/bucketstore"
 	"spsyncapi/internal/crypto"
 	"spsyncapi/internal/storage"
+	"spsyncapi/pkg/azureblob"
+	"spsyncapi/pkg/graphapi"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
-func setupTransferFixtures(t *testing.T, db *gorm.DB, memberID string) (orgID, bucketID string, enc *crypto.SecretEncryptor) {
+type mockGraphService struct {
+	tokenCalls   int
+	siteID       string
+	drives       []graphapi.Drive
+	itemsByDrive map[string][]graphapi.DriveItem
+	downloadBody string
+	uploadWhole  string
+	uploadChunk  struct {
+		path string
+		size int64
+	}
+}
+
+func (m *mockGraphService) GetAccessToken() (string, error) {
+	m.tokenCalls++
+	return "token", nil
+}
+
+func (m *mockGraphService) ValidateToken(string) (bool, error) { return true, nil }
+func (m *mockGraphService) FetchFromGraphApi(string) (int, []byte, error) {
+	return http.StatusOK, nil, nil
+}
+
+func (m *mockGraphService) GetSiteId(string) (string, error) {
+	return m.siteID, nil
+}
+
+func (m *mockGraphService) GetDriveId(string, driveName string) (string, error) {
+	for _, d := range m.drives {
+		if d.Name == driveName {
+			return d.ID, nil
+		}
+	}
+	return "", graphapi.ErrDriveNotFound
+}
+
+func (m *mockGraphService) GetDriveList(string) <-chan graphapi.Drive {
+	ch := make(chan graphapi.Drive, len(m.drives))
+	for _, d := range m.drives {
+		ch <- d
+	}
+	close(ch)
+	return ch
+}
+
+func (m *mockGraphService) GetDriveItems(driveID string) <-chan graphapi.DriveItem {
+	ch := make(chan graphapi.DriveItem, len(m.itemsByDrive[driveID]))
+	for _, item := range m.itemsByDrive[driveID] {
+		ch <- item
+	}
+	close(ch)
+	return ch
+}
+
+func (m *mockGraphService) GetDriveItemDownload(string, string) (*http.Response, error) {
+	body := m.downloadBody
+	if body == "" {
+		body = "file-content"
+	}
+	return &http.Response{
+		StatusCode:    http.StatusOK,
+		Body:          io.NopCloser(strings.NewReader(body)),
+		ContentLength: int64(len(body)),
+	}, nil
+}
+
+func (m *mockGraphService) CreateDocumentLibrary(string, string) (string, error) {
+	return "new-list-id", nil
+}
+
+func (m *mockGraphService) UploadDriveItemWhole(_ string, itemPath string, _ io.Reader) error {
+	m.uploadWhole = itemPath
+	return nil
+}
+
+func (m *mockGraphService) UploadDriveItemChunked(_, itemPath string, totalBytes int64, _ io.Reader) error {
+	m.uploadChunk.path = itemPath
+	m.uploadChunk.size = totalBytes
+	return nil
+}
+
+type mockAzureService struct {
+	containerCreated bool
+	blobs            []azureblob.Blob
+	uploaded         []string
+	downloadBody     []byte
+}
+
+func (m *mockAzureService) CreateContainer(string) error {
+	m.containerCreated = true
+	return nil
+}
+
+func (m *mockAzureService) FetchBlobs(string, []string) <-chan azureblob.Blob {
+	ch := make(chan azureblob.Blob, len(m.blobs))
+	for _, b := range m.blobs {
+		ch <- b
+	}
+	close(ch)
+	return ch
+}
+
+func (m *mockAzureService) UploadBlob(_, blobName string, resp *http.Response) error {
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	m.uploaded = append(m.uploaded, blobName+":"+string(body))
+	return nil
+}
+
+func (m *mockAzureService) DownloadBlobToStream(string, string) (*blob.DownloadStreamResponse, error) {
+	body := m.downloadBody
+	if body == nil {
+		body = []byte("restore-content")
+	}
+	length := int64(len(body))
+	return &blob.DownloadStreamResponse{
+		DownloadResponse: blob.DownloadResponse{
+			Body:          io.NopCloser(bytes.NewReader(body)),
+			ContentLength: &length,
+		},
+	}, nil
+}
+
+func setupAzureTransferFixtures(t *testing.T, db *gorm.DB, memberID string) (orgID, bucketID string, enc *crypto.SecretEncryptor) {
 	t.Helper()
 
 	enc, err := crypto.NewSecretEncryptor("test-encryption-key")
@@ -46,10 +178,8 @@ func setupTransferFixtures(t *testing.T, db *gorm.DB, memberID string) (orgID, b
 		t.Fatalf("create org: %v", err)
 	}
 
-	config, err := json.Marshal(bucketstore.S3Config{
-		Server:    "https://s3.example.com",
-		AccessKey: "k",
-		SecretKey: "s",
+	config, err := json.Marshal(bucketstore.AzureConfig{
+		ConnectionString: "DefaultEndpointsProtocol=https;AccountName=test;AccountKey=key;EndpointSuffix=core.windows.net",
 	})
 	if err != nil {
 		t.Fatalf("marshal bucket config: %v", err)
@@ -64,8 +194,8 @@ func setupTransferFixtures(t *testing.T, db *gorm.DB, memberID string) (orgID, b
 	if err := bucketRepo.Create(&storage.BucketStore{
 		ID:              bucketID,
 		MemberID:        memberID,
-		BucketName:      "backup-bucket",
-		BucketType:      storage.BucketTypeS3,
+		BucketName:      "backup-container",
+		BucketType:      storage.BucketTypeAzure,
 		ConfigEncrypted: configEnc,
 		Active:          true,
 		CreatedAt:       now,
@@ -88,13 +218,13 @@ func runTransferChain(ctx context.Context, acts *Activities, in FinalizeRunInput
 		return err
 	}
 
-	for _, path := range meta.Paths {
+	for _, file := range meta.Files {
 		if err := acts.TransferSingleFile(ctx, TransferSingleFileInput{
 			RunID:    in.RunID,
 			JobID:    in.JobID,
 			MemberID: in.MemberID,
 			Kind:     in.Kind,
-			FilePath: path,
+			File:     file,
 		}); err != nil {
 			return err
 		}
@@ -103,7 +233,7 @@ func runTransferChain(ctx context.Context, acts *Activities, in FinalizeRunInput
 	return acts.FinalizeRun(ctx, in)
 }
 
-func TestBackupTransferChainIdempotent(t *testing.T) {
+func TestBackupTransferChainWithMocks(t *testing.T) {
 	db, err := storage.OpenSQLite("file::memory:")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -114,19 +244,33 @@ func TestBackupTransferChainIdempotent(t *testing.T) {
 	runRepo := storage.NewBackupRunRepository(db)
 
 	memberID := "member-1"
-	orgID, bucketID, enc := setupTransferFixtures(t, db, memberID)
+	orgID, bucketID, enc := setupAzureTransferFixtures(t, db, memberID)
+
+	graphMock := &mockGraphService{
+		siteID: "site-1",
+		drives: []graphapi.Drive{{ID: "drive-1", Name: "Documents"}},
+		itemsByDrive: map[string][]graphapi.DriveItem{
+			"drive-1": {
+				{ID: "item-1", Name: "file.txt", FilePath: "/file.txt", Size: 12},
+				{ID: "item-2", Name: "skip.txt", FilePath: "/skip.txt", Size: 2},
+			},
+		},
+	}
+	azureMock := &mockAzureService{}
 
 	now := time.Now().UTC()
+	minSize := int64(10)
 	jobID := uuid.NewString()
 	if err := jobRepo.Create(&storage.BackupJob{
-		ID:             jobID,
-		MemberID:       memberID,
-		Active:         true,
-		OrganizationID: orgID,
-		BucketStoreID:  bucketID,
-		SharePointSite: "https://example.com",
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID:                jobID,
+		MemberID:          memberID,
+		Active:            true,
+		OrganizationID:    orgID,
+		BucketStoreID:     bucketID,
+		SharePointSite:    "https://tenant.sharepoint.com/sites/demo",
+		FilterMinFileSize: &minSize,
+		CreatedAt:         now,
+		UpdatedAt:         now,
 	}); err != nil {
 		t.Fatalf("create job: %v", err)
 	}
@@ -142,14 +286,14 @@ func TestBackupTransferChainIdempotent(t *testing.T) {
 	}
 
 	acts := &Activities{
-		BackupRunRepo:      runRepo,
-		BackupJobRepo:      jobRepo,
-		OrgRepo:            storage.NewOrganizationRepository(db),
-		BucketStoreRepo:    storage.NewBucketStoreRepository(db),
-		Encryptor:          enc,
-		Logger:             logger,
-		MetadataFetchDelay: time.Millisecond,
-		TransferDelay:      time.Millisecond,
+		BackupRunRepo: runRepo,
+		BackupJobRepo: jobRepo,
+		OrgRepo:       storage.NewOrganizationRepository(db),
+		BucketStoreRepo: storage.NewBucketStoreRepository(db),
+		Encryptor:     enc,
+		Logger:        logger,
+		GraphServiceBuilder: func(jobContext) graphapi.Service { return graphMock },
+		AzureServiceBuilder: func(jobContext) azureblob.Service { return azureMock },
 	}
 
 	in := FinalizeRunInput{
@@ -174,17 +318,22 @@ func TestBackupTransferChainIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list transfers: %v", err)
 	}
-	if total != metadataFileCount {
-		t.Fatalf("file count = %d, want %d", total, metadataFileCount)
+	if total != 1 {
+		t.Fatalf("file count = %d, want 1 (size filter should skip one file)", total)
+	}
+	if !azureMock.containerCreated {
+		t.Fatal("expected azure container to be created")
+	}
+	if len(azureMock.uploaded) != 1 {
+		t.Fatalf("uploaded = %#v, want 1 upload", azureMock.uploaded)
 	}
 
-	// Second invocation should be a no-op for completed run.
 	if err := runTransferChain(context.Background(), acts, in); err != nil {
 		t.Fatalf("second transfer chain: %v", err)
 	}
 }
 
-func TestRestoreTransferChainSetsJobLastRun(t *testing.T) {
+func TestRestoreTransferChainWithMocks(t *testing.T) {
 	db, err := storage.OpenSQLite("file::memory:")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -195,7 +344,18 @@ func TestRestoreTransferChainSetsJobLastRun(t *testing.T) {
 	runRepo := storage.NewRestoreRunRepository(db)
 
 	memberID := "member-1"
-	orgID, bucketID, enc := setupTransferFixtures(t, db, memberID)
+	orgID, bucketID, enc := setupAzureTransferFixtures(t, db, memberID)
+
+	graphMock := &mockGraphService{
+		siteID: "site-1",
+		drives: []graphapi.Drive{{ID: "drive-1", Name: "Documents"}},
+	}
+	azureMock := &mockAzureService{
+		blobs: []azureblob.Blob{
+			{FullPath: "Documents/folder/file.txt"},
+		},
+		downloadBody: []byte("hello-restore"),
+	}
 
 	now := time.Now().UTC()
 	jobID := uuid.NewString()
@@ -206,7 +366,7 @@ func TestRestoreTransferChainSetsJobLastRun(t *testing.T) {
 		Active:         true,
 		OrganizationID: orgID,
 		BucketStoreID:  bucketID,
-		SharePointSite: "https://example.com",
+		SharePointSite: "https://tenant.sharepoint.com/sites/demo",
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}); err != nil {
@@ -224,14 +384,14 @@ func TestRestoreTransferChainSetsJobLastRun(t *testing.T) {
 	}
 
 	acts := &Activities{
-		RestoreRunRepo:     runRepo,
-		RestoreJobRepo:     jobRepo,
-		OrgRepo:            storage.NewOrganizationRepository(db),
-		BucketStoreRepo:    storage.NewBucketStoreRepository(db),
-		Encryptor:          enc,
-		Logger:             logger,
-		MetadataFetchDelay: time.Millisecond,
-		TransferDelay:      time.Millisecond,
+		RestoreRunRepo:  runRepo,
+		RestoreJobRepo:  jobRepo,
+		OrgRepo:         storage.NewOrganizationRepository(db),
+		BucketStoreRepo: storage.NewBucketStoreRepository(db),
+		Encryptor:       enc,
+		Logger:          logger,
+		GraphServiceBuilder: func(jobContext) graphapi.Service { return graphMock },
+		AzureServiceBuilder: func(jobContext) azureblob.Service { return azureMock },
 	}
 
 	in := FinalizeRunInput{
@@ -251,9 +411,13 @@ func TestRestoreTransferChainSetsJobLastRun(t *testing.T) {
 	if job.LastRun == nil {
 		t.Fatal("expected restore job last_run to be set when work starts")
 	}
+
+	if graphMock.uploadWhole != "folder/file.txt" {
+		t.Fatalf("upload path = %q, want folder/file.txt", graphMock.uploadWhole)
+	}
 }
 
-func TestTransferSingleFileLogsConnectionContext(t *testing.T) {
+func TestTransferSingleBackupFileIdempotent(t *testing.T) {
 	db, err := storage.OpenSQLite("file::memory:")
 	if err != nil {
 		t.Fatalf("open db: %v", err)
@@ -264,7 +428,10 @@ func TestTransferSingleFileLogsConnectionContext(t *testing.T) {
 	runRepo := storage.NewBackupRunRepository(db)
 
 	memberID := "member-1"
-	orgID, bucketID, enc := setupTransferFixtures(t, db, memberID)
+	orgID, bucketID, enc := setupAzureTransferFixtures(t, db, memberID)
+
+	graphMock := &mockGraphService{}
+	azureMock := &mockAzureService{}
 
 	now := time.Now().UTC()
 	jobID := uuid.NewString()
@@ -298,17 +465,102 @@ func TestTransferSingleFileLogsConnectionContext(t *testing.T) {
 		BucketStoreRepo: storage.NewBucketStoreRepository(db),
 		Encryptor:       enc,
 		Logger:          logger,
-		TransferDelay:   time.Millisecond,
+		GraphServiceBuilder: func(jobContext) graphapi.Service { return graphMock },
+		AzureServiceBuilder: func(jobContext) azureblob.Service { return azureMock },
 	}
 
-	path := DummyFilePath(jobID, 1)
-	if err := acts.TransferSingleFile(context.Background(), TransferSingleFileInput{
+	file := FileDescriptor{
+		Path:        "Documents/file.txt",
+		DriveID:     "drive-1",
+		DriveItemID: "item-1",
+		Size:        12,
+	}
+	in := TransferSingleFileInput{
 		RunID:    runID,
 		JobID:    jobID,
 		MemberID: memberID,
 		Kind:     RunKindBackup,
-		FilePath: path,
+		File:     file,
+	}
+
+	if err := acts.TransferSingleFile(context.Background(), in); err != nil {
+		t.Fatalf("first transfer: %v", err)
+	}
+	if err := acts.TransferSingleFile(context.Background(), in); err != nil {
+		t.Fatalf("second transfer: %v", err)
+	}
+
+	_, total, err := runRepo.ListFileTransfers(runID, 0, 10)
+	if err != nil {
+		t.Fatalf("list transfers: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("transfer count = %d, want 1", total)
+	}
+}
+
+func TestLoadJobContextRejectsS3(t *testing.T) {
+	db, err := storage.OpenSQLite("file::memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	memberID := "member-1"
+	orgID, _, enc := setupAzureTransferFixtures(t, db, memberID)
+
+	s3Config, err := json.Marshal(bucketstore.S3Config{
+		Server:    "https://s3.example.com",
+		AccessKey: "k",
+		SecretKey: "s",
+	})
+	if err != nil {
+		t.Fatalf("marshal s3 config: %v", err)
+	}
+	configEnc, err := enc.Encrypt(string(s3Config))
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+
+	bucketID := uuid.NewString()
+	now := time.Now().UTC()
+	if err := storage.NewBucketStoreRepository(db).Create(&storage.BucketStore{
+		ID:              bucketID,
+		MemberID:        memberID,
+		BucketName:      "s3-bucket",
+		BucketType:      storage.BucketTypeS3,
+		ConfigEncrypted: configEnc,
+		Active:          true,
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}); err != nil {
-		t.Fatalf("transfer single file: %v", err)
+		t.Fatalf("create s3 bucket: %v", err)
+	}
+
+	jobID := uuid.NewString()
+	if err := storage.NewBackupJobRepository(db).Create(&storage.BackupJob{
+		ID:             jobID,
+		MemberID:       memberID,
+		Active:         true,
+		OrganizationID: orgID,
+		BucketStoreID:  bucketID,
+		SharePointSite: "https://example.com",
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	acts := &Activities{
+		BackupJobRepo:   storage.NewBackupJobRepository(db),
+		OrgRepo:         storage.NewOrganizationRepository(db),
+		BucketStoreRepo: storage.NewBucketStoreRepository(db),
+		Encryptor:       enc,
+		Logger:          logger,
+	}
+
+	_, err = acts.loadJobContext(jobID, memberID, RunKindBackup)
+	if err == nil {
+		t.Fatal("expected error for s3 bucket type")
 	}
 }

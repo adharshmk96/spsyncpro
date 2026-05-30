@@ -80,6 +80,14 @@ func (r *BackupRunRepository) CreateFileTransfer(ft *BackupRunFileTransfer) erro
 	return nil
 }
 
+// UpdateFileTransfer persists changes to a file transfer row.
+func (r *BackupRunRepository) UpdateFileTransfer(ft *BackupRunFileTransfer) error {
+	if err := r.db.Save(ft).Error; err != nil {
+		return fmt.Errorf("backup run repo: update file transfer: %w", err)
+	}
+	return nil
+}
+
 // FindByID returns a backup run owned by memberID.
 func (r *BackupRunRepository) FindByID(id, memberID string) (*BackupRun, error) {
 	var run BackupRun

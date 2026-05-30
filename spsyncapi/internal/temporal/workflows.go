@@ -7,6 +7,13 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
+const (
+	defaultMaxConcurrentTransfers = 5
+	fetchMetadataTimeout          = 30 * time.Minute
+	transferActivityTimeout       = 2 * time.Hour
+	transferHeartbeatTimeout      = 60 * time.Second
+)
+
 // BackupRunWorkflow orchestrates a single backup run (manual, scheduled, or resumed).
 func BackupRunWorkflow(ctx workflow.Context, in RunWorkflowInput) error {
 	return runTransferWorkflow(ctx, in)
@@ -29,11 +36,12 @@ func ScheduledBackupWorkflow(ctx workflow.Context, in ScheduledBackupInput) erro
 	}
 
 	return runTransferWorkflow(ctx, RunWorkflowInput{
-		RunID:    runID,
-		JobID:    in.JobID,
-		MemberID: in.MemberID,
-		Kind:     RunKindBackup,
-		Resume:   true,
+		RunID:                  runID,
+		JobID:                  in.JobID,
+		MemberID:               in.MemberID,
+		Kind:                   RunKindBackup,
+		Resume:                 true,
+		MaxConcurrentTransfers: in.MaxConcurrentTransfers,
 	})
 }
 
@@ -46,8 +54,9 @@ func runTransferWorkflow(ctx workflow.Context, in RunWorkflowInput) error {
 		case RunKindBackup:
 			var runID string
 			if err := workflow.ExecuteActivity(actCtx, "CreateBackupRun", ScheduledBackupInput{
-				JobID:    in.JobID,
-				MemberID: in.MemberID,
+				JobID:                  in.JobID,
+				MemberID:               in.MemberID,
+				MaxConcurrentTransfers: in.MaxConcurrentTransfers,
 			}).Get(ctx, &runID); err != nil {
 				return err
 			}
@@ -72,8 +81,8 @@ func runTransferWorkflow(ctx workflow.Context, in RunWorkflowInput) error {
 	}
 
 	fetchCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 2 * time.Minute,
-		HeartbeatTimeout:    30 * time.Second,
+		StartToCloseTimeout: fetchMetadataTimeout,
+		HeartbeatTimeout:    transferHeartbeatTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: time.Second,
 			MaximumAttempts: 3,
@@ -91,27 +100,36 @@ func runTransferWorkflow(ctx workflow.Context, in RunWorkflowInput) error {
 	}
 
 	transferCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 45 * time.Second,
-		HeartbeatTimeout:    15 * time.Second,
+		StartToCloseTimeout: transferActivityTimeout,
+		HeartbeatTimeout:    transferHeartbeatTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: time.Second,
 			MaximumAttempts: 3,
 		},
 	})
 
-	futures := make([]workflow.Future, len(meta.Paths))
-	for i, path := range meta.Paths {
-		futures[i] = workflow.ExecuteActivity(transferCtx, transferSingleFileActivityName, TransferSingleFileInput{
-			RunID:    in.RunID,
-			JobID:    in.JobID,
-			MemberID: in.MemberID,
-			Kind:     in.Kind,
-			FilePath: path,
-		})
-	}
-	for _, f := range futures {
-		if err := f.Get(ctx, nil); err != nil {
-			return err
+	maxConcurrent := effectiveMaxConcurrentTransfers(in.MaxConcurrentTransfers)
+	for i := 0; i < len(meta.Files); i += maxConcurrent {
+		end := i + maxConcurrent
+		if end > len(meta.Files) {
+			end = len(meta.Files)
+		}
+		batch := meta.Files[i:end]
+
+		futures := make([]workflow.Future, len(batch))
+		for j, file := range batch {
+			futures[j] = workflow.ExecuteActivity(transferCtx, transferSingleFileActivityName, TransferSingleFileInput{
+				RunID:    in.RunID,
+				JobID:    in.JobID,
+				MemberID: in.MemberID,
+				Kind:     in.Kind,
+				File:     file,
+			})
+		}
+		for _, f := range futures {
+			if err := f.Get(ctx, nil); err != nil {
+				return err
+			}
 		}
 	}
 

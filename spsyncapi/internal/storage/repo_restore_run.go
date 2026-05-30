@@ -80,6 +80,14 @@ func (r *RestoreRunRepository) CreateFileTransfer(ft *RestoreRunFileTransfer) er
 	return nil
 }
 
+// UpdateFileTransfer persists changes to a file transfer row.
+func (r *RestoreRunRepository) UpdateFileTransfer(ft *RestoreRunFileTransfer) error {
+	if err := r.db.Save(ft).Error; err != nil {
+		return fmt.Errorf("restore run repo: update file transfer: %w", err)
+	}
+	return nil
+}
+
 // FindByID returns a restore run owned by memberID.
 func (r *RestoreRunRepository) FindByID(id, memberID string) (*RestoreRun, error) {
 	var run RestoreRun

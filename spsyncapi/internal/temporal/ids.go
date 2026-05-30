@@ -1,10 +1,8 @@
 package temporal
 
-import "fmt"
-
 const (
-	backupSchedulePrefix = "backup-job-"
-	backupWorkflowPrefix = "backup-run-"
+	backupSchedulePrefix  = "backup-job-"
+	backupWorkflowPrefix  = "backup-run-"
 	restoreWorkflowPrefix = "restore-run-"
 )
 
@@ -18,8 +16,4 @@ func BackupWorkflowID(runID string) string {
 
 func RestoreWorkflowID(runID string) string {
 	return restoreWorkflowPrefix + runID
-}
-
-func DummyFilePath(jobID string, index int) string {
-	return fmt.Sprintf("/dummy/%s/file-%d.txt", jobID, index)
 }

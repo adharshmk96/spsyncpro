@@ -8,19 +8,29 @@ const (
 	RunKindRestore RunKind = "restore"
 )
 
+// FileDescriptor identifies one file to transfer between SharePoint and Azure Blob.
+type FileDescriptor struct {
+	Path        string `json:"path"`
+	DriveID     string `json:"drive_id,omitempty"`
+	DriveItemID string `json:"drive_item_id,omitempty"`
+	Size        int64  `json:"size,omitempty"`
+}
+
 // RunWorkflowInput is passed to backup/restore run workflows.
 type RunWorkflowInput struct {
-	RunID    string  `json:"run_id"`
-	JobID    string  `json:"job_id"`
-	MemberID string  `json:"member_id"`
-	Kind     RunKind `json:"kind"`
-	Resume   bool    `json:"resume"`
+	RunID                  string  `json:"run_id"`
+	JobID                  string  `json:"job_id"`
+	MemberID               string  `json:"member_id"`
+	Kind                   RunKind `json:"kind"`
+	Resume                 bool    `json:"resume"`
+	MaxConcurrentTransfers int     `json:"max_concurrent_transfers,omitempty"`
 }
 
 // ScheduledBackupInput is passed when a Temporal schedule fires a backup run.
 type ScheduledBackupInput struct {
-	JobID    string `json:"job_id"`
-	MemberID string `json:"member_id"`
+	JobID                  string `json:"job_id"`
+	MemberID               string `json:"member_id"`
+	MaxConcurrentTransfers int    `json:"max_concurrent_transfers,omitempty"`
 }
 
 // FetchFileMetadataInput is the activity payload for listing files to transfer.
@@ -31,18 +41,18 @@ type FetchFileMetadataInput struct {
 	Kind     RunKind `json:"kind"`
 }
 
-// FetchFileMetadataOutput holds file paths discovered for a run.
+// FetchFileMetadataOutput holds files discovered for a run.
 type FetchFileMetadataOutput struct {
-	Paths []string `json:"paths"`
+	Files []FileDescriptor `json:"files"`
 }
 
 // TransferSingleFileInput is the activity payload for one file transfer.
 type TransferSingleFileInput struct {
-	RunID    string  `json:"run_id"`
-	JobID    string  `json:"job_id"`
-	MemberID string  `json:"member_id"`
-	Kind     RunKind `json:"kind"`
-	FilePath string  `json:"file_path"`
+	RunID    string         `json:"run_id"`
+	JobID    string         `json:"job_id"`
+	MemberID string         `json:"member_id"`
+	Kind     RunKind        `json:"kind"`
+	File     FileDescriptor `json:"file"`
 }
 
 // FinalizeRunInput is the activity payload for completing a run.
