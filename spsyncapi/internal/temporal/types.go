@@ -22,7 +22,6 @@ type RunWorkflowInput struct {
 	JobID                  string  `json:"job_id"`
 	MemberID               string  `json:"member_id"`
 	Kind                   RunKind `json:"kind"`
-	Resume                 bool    `json:"resume"`
 	MaxConcurrentTransfers int     `json:"max_concurrent_transfers,omitempty"`
 }
 
@@ -52,9 +51,8 @@ type ListPendingFileLogsInput struct {
 	RunID    string  `json:"run_id"`
 	JobID    string  `json:"job_id"`
 	MemberID string  `json:"member_id"`
-	Kind     RunKind `json:"kind"`
-	Offset   int     `json:"offset"`
-	Limit    int     `json:"limit"`
+	Kind  RunKind `json:"kind"`
+	Limit int     `json:"limit"`
 }
 
 // ListPendingFileLogsOutput holds files ready to transfer.

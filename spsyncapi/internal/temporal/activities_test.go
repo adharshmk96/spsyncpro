@@ -261,7 +261,6 @@ func runTransferChain(ctx context.Context, acts *Activities, in FinalizeRunInput
 			JobID:    in.JobID,
 			MemberID: in.MemberID,
 			Kind:     in.Kind,
-			Offset:   0,
 			Limit:    listPendingFileLogsBatchSize,
 		})
 		if err != nil {

@@ -284,13 +284,13 @@ func (a *Activities) ListPendingFileLogs(ctx context.Context, in ListPendingFile
 	statuses := []string{storage.FileLogStatusPending, storage.FileLogStatusFailure}
 	switch in.Kind {
 	case RunKindBackup:
-		logs, err := a.BackupRunRepo.ListFileLogsByStatus(in.RunID, statuses, in.Offset, in.Limit)
+		logs, err := a.BackupRunRepo.ListFileLogsByStatus(in.RunID, statuses, 0, in.Limit)
 		if err != nil {
 			return ListPendingFileLogsOutput{}, fmt.Errorf("list pending backup file logs: %w", err)
 		}
 		return ListPendingFileLogsOutput{Files: backupFileLogsToDescriptors(logs)}, nil
 	case RunKindRestore:
-		logs, err := a.RestoreRunRepo.ListFileLogsByStatus(in.RunID, statuses, in.Offset, in.Limit)
+		logs, err := a.RestoreRunRepo.ListFileLogsByStatus(in.RunID, statuses, 0, in.Limit)
 		if err != nil {
 			return ListPendingFileLogsOutput{}, fmt.Errorf("list pending restore file logs: %w", err)
 		}

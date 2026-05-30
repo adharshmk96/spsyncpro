@@ -16,7 +16,6 @@ import (
 
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/temporal"
 )
 
 const (
@@ -278,7 +277,7 @@ func (a *Activities) FinalizeRun(ctx context.Context, in FinalizeRunInput) error
 		if run.EndAt != nil {
 			return nil
 		}
-		return a.finalizeBackupRun(ctx, run, false)
+		return a.finalizeBackupRun(run)
 	case RunKindRestore:
 		run, err := a.RestoreRunRepo.FindByID(in.RunID, in.MemberID)
 		if err != nil {
@@ -287,29 +286,13 @@ func (a *Activities) FinalizeRun(ctx context.Context, in FinalizeRunInput) error
 		if run.EndAt != nil {
 			return nil
 		}
-		return a.finalizeRestoreRun(ctx, run, false)
+		return a.finalizeRestoreRun(run)
 	default:
 		return fmt.Errorf("finalize run activity: unknown kind %q", in.Kind)
 	}
 }
 
-func (a *Activities) finalizeBackupRun(ctx context.Context, run *storage.BackupRun, cancelled bool) error {
-	if err := ctx.Err(); err != nil && cancelled {
-		now := time.Now().UTC()
-		run.EndAt = &now
-		if updateErr := a.BackupRunRepo.Update(run); updateErr != nil {
-			return fmt.Errorf("finalize backup run: %w", updateErr)
-		}
-		return temporal.NewCanceledError("backup run stopped")
-	}
-	if cancelled {
-		now := time.Now().UTC()
-		run.EndAt = &now
-		if err := a.BackupRunRepo.Update(run); err != nil {
-			return fmt.Errorf("finalize backup run: %w", err)
-		}
-		return temporal.NewCanceledError("backup run stopped")
-	}
+func (a *Activities) finalizeBackupRun(run *storage.BackupRun) error {
 	now := time.Now().UTC()
 	run.EndAt = &now
 	if err := a.BackupRunRepo.Update(run); err != nil {
@@ -318,23 +301,7 @@ func (a *Activities) finalizeBackupRun(ctx context.Context, run *storage.BackupR
 	return nil
 }
 
-func (a *Activities) finalizeRestoreRun(ctx context.Context, run *storage.RestoreRun, cancelled bool) error {
-	if err := ctx.Err(); err != nil && cancelled {
-		now := time.Now().UTC()
-		run.EndAt = &now
-		if updateErr := a.RestoreRunRepo.Update(run); updateErr != nil {
-			return fmt.Errorf("finalize restore run: %w", updateErr)
-		}
-		return temporal.NewCanceledError("restore run stopped")
-	}
-	if cancelled {
-		now := time.Now().UTC()
-		run.EndAt = &now
-		if err := a.RestoreRunRepo.Update(run); err != nil {
-			return fmt.Errorf("finalize restore run: %w", err)
-		}
-		return temporal.NewCanceledError("restore run stopped")
-	}
+func (a *Activities) finalizeRestoreRun(run *storage.RestoreRun) error {
 	now := time.Now().UTC()
 	run.EndAt = &now
 	if err := a.RestoreRunRepo.Update(run); err != nil {

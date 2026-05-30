@@ -132,7 +132,6 @@ func (s *Service) StartRun(ctx context.Context, memberID, jobID string) (*StartR
 		RunID:    run.ID,
 		JobID:    jobID,
 		MemberID: memberID,
-		Resume:   true,
 	}); err != nil {
 		return nil, fmt.Errorf("restore run service: start workflow: %w", err)
 	}
@@ -177,7 +176,6 @@ func (s *Service) StartRunAt(ctx context.Context, memberID, jobID string, at tim
 		RunID:    run.ID,
 		JobID:    jobID,
 		MemberID: memberID,
-		Resume:   true,
 	}
 	if err := s.executor.StartRestoreRunAt(ctx, in, at); err != nil {
 		return nil, fmt.Errorf("restore run service: start workflow: %w", err)
