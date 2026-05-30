@@ -89,14 +89,20 @@ func runTransferWorkflow(ctx workflow.Context, in RunWorkflowInput) error {
 		},
 	})
 
-	var meta FetchFileMetadataOutput
-	if err := workflow.ExecuteActivity(fetchCtx, fetchFileMetadataActivityName, FetchFileMetadataInput{
+	syncInput := SyncFileMetadataPageInput{
 		RunID:    in.RunID,
 		JobID:    in.JobID,
 		MemberID: in.MemberID,
 		Kind:     in.Kind,
-	}).Get(ctx, &meta); err != nil {
-		return err
+	}
+	for {
+		var syncOut SyncFileMetadataPageOutput
+		if err := workflow.ExecuteActivity(fetchCtx, syncFileMetadataPageActivityName, syncInput).Get(ctx, &syncOut); err != nil {
+			return err
+		}
+		if syncOut.Complete {
+			break
+		}
 	}
 
 	transferCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
@@ -108,27 +114,52 @@ func runTransferWorkflow(ctx workflow.Context, in RunWorkflowInput) error {
 		},
 	})
 
-	maxConcurrent := effectiveMaxConcurrentTransfers(in.MaxConcurrentTransfers)
-	for i := 0; i < len(meta.Files); i += maxConcurrent {
-		end := i + maxConcurrent
-		if end > len(meta.Files) {
-			end = len(meta.Files)
-		}
-		batch := meta.Files[i:end]
+	listCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: time.Second,
+			MaximumAttempts: 3,
+		},
+	})
 
-		futures := make([]workflow.Future, len(batch))
-		for j, file := range batch {
-			futures[j] = workflow.ExecuteActivity(transferCtx, transferSingleFileActivityName, TransferSingleFileInput{
-				RunID:    in.RunID,
-				JobID:    in.JobID,
-				MemberID: in.MemberID,
-				Kind:     in.Kind,
-				File:     file,
-			})
+	maxConcurrent := effectiveMaxConcurrentTransfers(in.MaxConcurrentTransfers)
+	for {
+		var pending ListPendingFileLogsOutput
+		if err := workflow.ExecuteActivity(listCtx, listPendingFileLogsActivityName, ListPendingFileLogsInput{
+			RunID:    in.RunID,
+			JobID:    in.JobID,
+			MemberID: in.MemberID,
+			Kind:     in.Kind,
+			Offset:   0,
+			Limit:    listPendingFileLogsBatchSize,
+		}).Get(ctx, &pending); err != nil {
+			return err
 		}
-		for _, f := range futures {
-			if err := f.Get(ctx, nil); err != nil {
-				return err
+		if len(pending.Files) == 0 {
+			break
+		}
+
+		for i := 0; i < len(pending.Files); i += maxConcurrent {
+			end := i + maxConcurrent
+			if end > len(pending.Files) {
+				end = len(pending.Files)
+			}
+			batch := pending.Files[i:end]
+
+			futures := make([]workflow.Future, len(batch))
+			for j, file := range batch {
+				futures[j] = workflow.ExecuteActivity(transferCtx, transferSingleFileActivityName, TransferSingleFileInput{
+					RunID:    in.RunID,
+					JobID:    in.JobID,
+					MemberID: in.MemberID,
+					Kind:     in.Kind,
+					File:     file,
+				})
+			}
+			for _, f := range futures {
+				if err := f.Get(ctx, nil); err != nil {
+					return err
+				}
 			}
 		}
 	}

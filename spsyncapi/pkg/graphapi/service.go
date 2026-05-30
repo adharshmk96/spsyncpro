@@ -48,7 +48,9 @@ type Service interface {
 	GetSiteId(siteUrl string) (string, error)
 	GetDriveId(siteId, driveName string) (string, error)
 	GetDriveList(siteId string) <-chan Drive
+	ListDrivesPage(siteId, pageURL string) ([]Drive, string, error)
 	GetDriveItems(driveId string) <-chan DriveItem
+	ListDriveItemsPage(driveId string, state *DriveCrawlState) ([]DriveItem, *DriveCrawlState, bool, error)
 	GetDriveItemDownload(driveId, itemId string) (*http.Response, error)
 
 	CreateDocumentLibrary(siteId, driveName string) (string, error)
@@ -254,46 +256,19 @@ func (ms *service) GetDriveItems(driveID string) <-chan DriveItem {
 	go func() {
 		defer close(driveItemChan)
 
-		type folder struct {
-			url  string
-			path string
-		}
-		stack := []folder{{url: fmt.Sprintf("%s/drives/%s/root/children", graphAPIURL, driveID), path: ""}}
-
-		for len(stack) > 0 {
-			current := stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
-
-			driveItemsURL := current.url
-			currentPath := current.path
-
-			for driveItemsURL != "" {
-				status, body, err := ms.FetchFromGraphApi(driveItemsURL)
-				if err != nil {
-					ms.logger.Error("failed to fetch drive items", slog.String("error", err.Error()))
-					return
-				}
-				if status != http.StatusOK {
-					return
-				}
-
-				var response graphResponse[DriveItem]
-				if err = json.Unmarshal(body, &response); err != nil {
-					ms.logger.Error("failed to unmarshal drive items", slog.String("error", err.Error()))
-					return
-				}
-
-				for _, item := range response.Value {
-					fullPath := currentPath + "/" + item.Name
-					if item.IsFolder() {
-						newURL := fmt.Sprintf("%s/drives/%s/items/%s/children", graphAPIURL, driveID, item.ID)
-						stack = append(stack, folder{url: newURL, path: fullPath})
-					} else {
-						item.FilePath = fullPath
-						driveItemChan <- item
-					}
-				}
-				driveItemsURL = response.Next
+		var state *DriveCrawlState
+		for {
+			items, next, done, err := ms.ListDriveItemsPage(driveID, state)
+			if err != nil {
+				ms.logger.Error("failed to list drive items page", slog.String("error", err.Error()))
+				return
+			}
+			state = next
+			for _, item := range items {
+				driveItemChan <- item
+			}
+			if done {
+				return
 			}
 		}
 	}()

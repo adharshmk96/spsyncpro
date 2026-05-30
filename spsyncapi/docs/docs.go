@@ -2076,13 +2076,25 @@ const docTemplate = `{
         "backuprun.FileTransferDetails": {
             "type": "object",
             "properties": {
+                "drive_name": {
+                    "type": "string"
+                },
                 "end_at": {
+                    "type": "string"
+                },
+                "error_message": {
                     "type": "string"
                 },
                 "file_path": {
                     "type": "string"
                 },
+                "size": {
+                    "type": "integer"
+                },
                 "start_at": {
+                    "type": "string"
+                },
+                "status": {
                     "type": "string"
                 }
             }
@@ -2737,13 +2749,25 @@ const docTemplate = `{
         "restorerun.FileTransferDetails": {
             "type": "object",
             "properties": {
+                "drive_name": {
+                    "type": "string"
+                },
                 "end_at": {
+                    "type": "string"
+                },
+                "error_message": {
                     "type": "string"
                 },
                 "file_path": {
                     "type": "string"
                 },
+                "size": {
+                    "type": "integer"
+                },
                 "start_at": {
+                    "type": "string"
+                },
+                "status": {
                     "type": "string"
                 }
             }

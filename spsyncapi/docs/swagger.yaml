@@ -73,11 +73,19 @@ definitions:
     type: object
   backuprun.FileTransferDetails:
     properties:
+      drive_name:
+        type: string
       end_at:
+        type: string
+      error_message:
         type: string
       file_path:
         type: string
+      size:
+        type: integer
       start_at:
+        type: string
+      status:
         type: string
     type: object
   backuprun.RunDetails:
@@ -506,11 +514,19 @@ definitions:
     type: object
   restorerun.FileTransferDetails:
     properties:
+      drive_name:
+        type: string
       end_at:
+        type: string
+      error_message:
         type: string
       file_path:
         type: string
+      size:
+        type: integer
       start_at:
+        type: string
+      status:
         type: string
     type: object
   restorerun.RunDetails:

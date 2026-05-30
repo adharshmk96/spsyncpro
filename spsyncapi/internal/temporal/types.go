@@ -33,16 +33,32 @@ type ScheduledBackupInput struct {
 	MaxConcurrentTransfers int    `json:"max_concurrent_transfers,omitempty"`
 }
 
-// FetchFileMetadataInput is the activity payload for listing files to transfer.
-type FetchFileMetadataInput struct {
+// SyncFileMetadataPageInput is the activity payload for one metadata sync page.
+type SyncFileMetadataPageInput struct {
 	RunID    string  `json:"run_id"`
 	JobID    string  `json:"job_id"`
 	MemberID string  `json:"member_id"`
 	Kind     RunKind `json:"kind"`
 }
 
-// FetchFileMetadataOutput holds files discovered for a run.
-type FetchFileMetadataOutput struct {
+// SyncFileMetadataPageOutput reports metadata sync progress for one page.
+type SyncFileMetadataPageOutput struct {
+	Complete            bool `json:"complete"`
+	FilesSyncedThisPage int  `json:"files_synced_this_page"`
+}
+
+// ListPendingFileLogsInput requests a batch of files awaiting transfer.
+type ListPendingFileLogsInput struct {
+	RunID    string  `json:"run_id"`
+	JobID    string  `json:"job_id"`
+	MemberID string  `json:"member_id"`
+	Kind     RunKind `json:"kind"`
+	Offset   int     `json:"offset"`
+	Limit    int     `json:"limit"`
+}
+
+// ListPendingFileLogsOutput holds files ready to transfer.
+type ListPendingFileLogsOutput struct {
 	Files []FileDescriptor `json:"files"`
 }
 

@@ -117,16 +117,29 @@ type BackupRun struct {
 	StartAt   *time.Time `gorm:"column:start_at;type:datetime"`
 	EndAt     *time.Time `gorm:"column:end_at;type:datetime"`
 	CreatedAt time.Time  `gorm:"not null;index"`
+
+	MetadataSyncStatus     string `gorm:"column:metadata_sync_status;not null;default:not_started;type:text"`
+	MetadataSyncCheckpoint string `gorm:"column:metadata_sync_checkpoint;type:text"`
+	MetadataSyncError      string `gorm:"column:metadata_sync_error;type:text"`
 }
 
-// BackupRunFileTransfer records one file transferred during a backup run.
+// BackupRunFileTransfer records per-file metadata and transfer status for a backup run.
 type BackupRunFileTransfer struct {
 	ID        string     `gorm:"primaryKey;type:text"`
-	RunID     string     `gorm:"column:run_id;not null;index;type:text"`
-	FilePath  string     `gorm:"column:file_path;not null;type:text"`
-	StartAt   *time.Time `gorm:"column:start_at;type:datetime"`
-	EndAt     *time.Time `gorm:"column:end_at;type:datetime"`
-	CreatedAt time.Time  `gorm:"not null"`
+	RunID     string     `gorm:"column:run_id;not null;index;type:text;uniqueIndex:idx_backup_run_file_path"`
+	FilePath  string     `gorm:"column:file_path;not null;type:text;uniqueIndex:idx_backup_run_file_path"`
+	Status    string     `gorm:"column:status;not null;default:pending;type:text;index"`
+
+	DriveID     string `gorm:"column:drive_id;type:text"`
+	DriveName   string `gorm:"column:drive_name;type:text"`
+	DriveItemID string `gorm:"column:drive_item_id;type:text"`
+	Size        int64  `gorm:"column:size"`
+
+	ErrorMessage      string     `gorm:"column:error_message;type:text"`
+	MetadataSyncedAt  *time.Time `gorm:"column:metadata_synced_at;type:datetime"`
+	StartAt           *time.Time `gorm:"column:start_at;type:datetime"`
+	EndAt             *time.Time `gorm:"column:end_at;type:datetime"`
+	CreatedAt         time.Time  `gorm:"not null"`
 }
 
 // RestoreJob defines a restore configuration (minimal model for run ownership).
@@ -154,14 +167,27 @@ type RestoreRun struct {
 	StartAt   *time.Time `gorm:"column:start_at;type:datetime"`
 	EndAt     *time.Time `gorm:"column:end_at;type:datetime"`
 	CreatedAt time.Time  `gorm:"not null;index"`
+
+	MetadataSyncStatus     string `gorm:"column:metadata_sync_status;not null;default:not_started;type:text"`
+	MetadataSyncCheckpoint string `gorm:"column:metadata_sync_checkpoint;type:text"`
+	MetadataSyncError      string `gorm:"column:metadata_sync_error;type:text"`
 }
 
-// RestoreRunFileTransfer records one file transferred during a restore run.
+// RestoreRunFileTransfer records per-file metadata and transfer status for a restore run.
 type RestoreRunFileTransfer struct {
 	ID        string     `gorm:"primaryKey;type:text"`
-	RunID     string     `gorm:"column:run_id;not null;index;type:text"`
-	FilePath  string     `gorm:"column:file_path;not null;type:text"`
-	StartAt   *time.Time `gorm:"column:start_at;type:datetime"`
-	EndAt     *time.Time `gorm:"column:end_at;type:datetime"`
-	CreatedAt time.Time  `gorm:"not null"`
+	RunID     string     `gorm:"column:run_id;not null;index;type:text;uniqueIndex:idx_restore_run_file_path"`
+	FilePath  string     `gorm:"column:file_path;not null;type:text;uniqueIndex:idx_restore_run_file_path"`
+	Status    string     `gorm:"column:status;not null;default:pending;type:text;index"`
+
+	DriveID     string `gorm:"column:drive_id;type:text"`
+	DriveName   string `gorm:"column:drive_name;type:text"`
+	DriveItemID string `gorm:"column:drive_item_id;type:text"`
+	Size        int64  `gorm:"column:size"`
+
+	ErrorMessage     string     `gorm:"column:error_message;type:text"`
+	MetadataSyncedAt *time.Time `gorm:"column:metadata_synced_at;type:datetime"`
+	StartAt          *time.Time `gorm:"column:start_at;type:datetime"`
+	EndAt            *time.Time `gorm:"column:end_at;type:datetime"`
+	CreatedAt        time.Time  `gorm:"not null"`
 }

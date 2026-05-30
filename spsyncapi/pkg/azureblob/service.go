@@ -24,6 +24,7 @@ type Config struct {
 type Service interface {
 	CreateContainer(containerName string) error
 	FetchBlobs(containerName string, filter []string) <-chan Blob
+	ListBlobsPage(containerName, marker string, filter []string) (blobs []Blob, nextMarker string, err error)
 	UploadBlob(containerName, blobName string, resp *http.Response) error
 	DownloadBlobToStream(containerName, blobName string) (*blob.DownloadStreamResponse, error)
 }
@@ -82,53 +83,89 @@ func generateBlobSASURL(connectionString, containerName, blobName string) (strin
 		accountName, containerName, blobName, queryParams.Encode()), nil
 }
 
+func (s *service) ListBlobsPage(containerName, marker string, filter []string) ([]Blob, string, error) {
+	serviceClient, err := azblob.NewClientFromConnectionString(s.connectionString, nil)
+	if err != nil {
+		return nil, "", err
+	}
+
+	opts := &azblob.ListBlobsFlatOptions{}
+	if marker != "" {
+		opts.Marker = &marker
+	}
+
+	pager := serviceClient.NewListBlobsFlatPager(containerName, opts)
+	if !pager.More() {
+		return nil, "", nil
+	}
+
+	page, err := pager.NextPage(context.Background())
+	if err != nil {
+		return nil, "", err
+	}
+
+	var blobs []Blob
+	for _, item := range page.Segment.BlobItems {
+		if item.Name == nil {
+			continue
+		}
+		itemName := *item.Name
+		if !blobMatchesFilter(itemName, filter) {
+			continue
+		}
+
+		downloadURL, err := generateBlobSASURL(s.connectionString, containerName, itemName)
+		if err != nil {
+			s.logger.Error("failed to generate blob SAS URL", slog.String("error", err.Error()))
+			continue
+		}
+
+		var size int64
+		if item.Properties != nil && item.Properties.ContentLength != nil {
+			size = *item.Properties.ContentLength
+		}
+		blobs = append(blobs, Blob{FullPath: itemName, DownloadURL: downloadURL, Size: size})
+	}
+
+	nextMarker := ""
+	if page.NextMarker != nil {
+		nextMarker = *page.NextMarker
+	}
+	return blobs, nextMarker, nil
+}
+
+func blobMatchesFilter(itemName string, filter []string) bool {
+	if len(filter) == 0 {
+		return true
+	}
+	for _, f := range filter {
+		if strings.Contains(itemName, f) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *service) FetchBlobs(containerName string, filter []string) <-chan Blob {
 	blobChan := make(chan Blob)
 
-	serviceClient, err := azblob.NewClientFromConnectionString(s.connectionString, nil)
-	if err != nil {
-		s.logger.Error("failed to create service client", slog.String("error", err.Error()))
-		close(blobChan)
-		return blobChan
-	}
-
-	pager := serviceClient.NewListBlobsFlatPager(containerName, nil)
 	go func() {
 		defer close(blobChan)
 
-		for pager.More() {
-			page, err := pager.NextPage(context.Background())
+		marker := ""
+		for {
+			blobs, next, err := s.ListBlobsPage(containerName, marker, filter)
 			if err != nil {
-				s.logger.Error("failed to list blobs", slog.String("error", err.Error()))
+				s.logger.Error("failed to list blobs page", slog.String("error", err.Error()))
 				return
 			}
-
-			for _, item := range page.Segment.BlobItems {
-				if item.Name == nil {
-					continue
-				}
-				itemName := *item.Name
-
-				if len(filter) > 0 {
-					matched := false
-					for _, f := range filter {
-						if strings.Contains(itemName, f) {
-							matched = true
-							break
-						}
-					}
-					if !matched {
-						continue
-					}
-				}
-
-				downloadURL, err := generateBlobSASURL(s.connectionString, containerName, itemName)
-				if err != nil {
-					s.logger.Error("failed to generate blob SAS URL", slog.String("error", err.Error()))
-					continue
-				}
-				blobChan <- Blob{FullPath: itemName, DownloadURL: downloadURL}
+			for _, b := range blobs {
+				blobChan <- b
 			}
+			if next == "" {
+				return
+			}
+			marker = next
 		}
 	}()
 

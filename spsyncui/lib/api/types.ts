@@ -194,6 +194,10 @@ export type RunDetails = {
 
 export type FileTransfer = {
   file_path: string;
+  status: string;
+  drive_name?: string;
+  size?: number;
+  error_message?: string;
   start_at?: string | null;
   end_at?: string | null;
 };

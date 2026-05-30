@@ -24,13 +24,15 @@ import (
 )
 
 type mockGraphService struct {
-	tokenCalls   int
-	siteID       string
-	drives       []graphapi.Drive
-	itemsByDrive map[string][]graphapi.DriveItem
-	downloadBody string
-	uploadWhole  string
-	uploadChunk  struct {
+	tokenCalls     int
+	siteID         string
+	drives         []graphapi.Drive
+	itemsByDrive   map[string][]graphapi.DriveItem
+	itemsPageDone  map[string]bool
+	drivesPageDone bool
+	downloadBody   string
+	uploadWhole    string
+	uploadChunk    struct {
 		path string
 		size int64
 	}
@@ -66,6 +68,26 @@ func (m *mockGraphService) GetDriveList(string) <-chan graphapi.Drive {
 	}
 	close(ch)
 	return ch
+}
+
+func (m *mockGraphService) ListDrivesPage(_ string, pageURL string) ([]graphapi.Drive, string, error) {
+	if pageURL != "" || m.drivesPageDone {
+		return nil, "", nil
+	}
+	m.drivesPageDone = true
+	return m.drives, "", nil
+}
+
+func (m *mockGraphService) ListDriveItemsPage(driveID string, state *graphapi.DriveCrawlState) ([]graphapi.DriveItem, *graphapi.DriveCrawlState, bool, error) {
+	if m.itemsPageDone == nil {
+		m.itemsPageDone = make(map[string]bool)
+	}
+	if m.itemsPageDone[driveID] {
+		return nil, state, true, nil
+	}
+	m.itemsPageDone[driveID] = true
+	items := m.itemsByDrive[driveID]
+	return items, &graphapi.DriveCrawlState{}, true, nil
 }
 
 func (m *mockGraphService) GetDriveItems(driveID string) <-chan graphapi.DriveItem {
@@ -107,6 +129,7 @@ func (m *mockGraphService) UploadDriveItemChunked(_, itemPath string, totalBytes
 type mockAzureService struct {
 	containerCreated bool
 	blobs            []azureblob.Blob
+	blobsPageDone    bool
 	uploaded         []string
 	downloadBody     []byte
 }
@@ -123,6 +146,14 @@ func (m *mockAzureService) FetchBlobs(string, []string) <-chan azureblob.Blob {
 	}
 	close(ch)
 	return ch
+}
+
+func (m *mockAzureService) ListBlobsPage(_ string, marker string, _ []string) ([]azureblob.Blob, string, error) {
+	if marker != "" || m.blobsPageDone {
+		return nil, "", nil
+	}
+	m.blobsPageDone = true
+	return m.blobs, "", nil
 }
 
 func (m *mockAzureService) UploadBlob(_, blobName string, resp *http.Response) error {
@@ -208,25 +239,47 @@ func setupAzureTransferFixtures(t *testing.T, db *gorm.DB, memberID string) (org
 }
 
 func runTransferChain(ctx context.Context, acts *Activities, in FinalizeRunInput) error {
-	meta, err := acts.FetchFileMetadata(ctx, FetchFileMetadataInput{
+	syncIn := SyncFileMetadataPageInput{
 		RunID:    in.RunID,
 		JobID:    in.JobID,
 		MemberID: in.MemberID,
 		Kind:     in.Kind,
-	})
-	if err != nil {
-		return err
+	}
+	for {
+		out, err := acts.SyncFileMetadataPage(ctx, syncIn)
+		if err != nil {
+			return err
+		}
+		if out.Complete {
+			break
+		}
 	}
 
-	for _, file := range meta.Files {
-		if err := acts.TransferSingleFile(ctx, TransferSingleFileInput{
+	for {
+		pending, err := acts.ListPendingFileLogs(ctx, ListPendingFileLogsInput{
 			RunID:    in.RunID,
 			JobID:    in.JobID,
 			MemberID: in.MemberID,
 			Kind:     in.Kind,
-			File:     file,
-		}); err != nil {
+			Offset:   0,
+			Limit:    listPendingFileLogsBatchSize,
+		})
+		if err != nil {
 			return err
+		}
+		if len(pending.Files) == 0 {
+			break
+		}
+		for _, file := range pending.Files {
+			if err := acts.TransferSingleFile(ctx, TransferSingleFileInput{
+				RunID:    in.RunID,
+				JobID:    in.JobID,
+				MemberID: in.MemberID,
+				Kind:     in.Kind,
+				File:     file,
+			}); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -352,7 +405,7 @@ func TestRestoreTransferChainWithMocks(t *testing.T) {
 	}
 	azureMock := &mockAzureService{
 		blobs: []azureblob.Blob{
-			{FullPath: "Documents/folder/file.txt"},
+			{FullPath: "Documents/folder/file.txt", Size: 13},
 		},
 		downloadBody: []byte("hello-restore"),
 	}
@@ -458,6 +511,24 @@ func TestTransferSingleBackupFileIdempotent(t *testing.T) {
 		t.Fatalf("create run: %v", err)
 	}
 
+	if err := runRepo.UpdateMetadataSyncState(runID, storage.MetadataSyncComplete, "", ""); err != nil {
+		t.Fatalf("mark metadata complete: %v", err)
+	}
+	syncedAt := now
+	if err := runRepo.UpsertFileLog(&storage.BackupRunFileTransfer{
+		ID:               uuid.NewString(),
+		RunID:            runID,
+		FilePath:         "Documents/file.txt",
+		Status:           storage.FileLogStatusPending,
+		DriveID:          "drive-1",
+		DriveItemID:      "item-1",
+		Size:             12,
+		MetadataSyncedAt: &syncedAt,
+		CreatedAt:        now,
+	}); err != nil {
+		t.Fatalf("seed file log: %v", err)
+	}
+
 	acts := &Activities{
 		BackupRunRepo:   runRepo,
 		BackupJobRepo:   jobRepo,
@@ -490,12 +561,12 @@ func TestTransferSingleBackupFileIdempotent(t *testing.T) {
 		t.Fatalf("second transfer: %v", err)
 	}
 
-	_, total, err := runRepo.ListFileTransfers(runID, 0, 10)
+	ft, err := runRepo.FindFileTransferByRunAndPath(runID, file.Path)
 	if err != nil {
-		t.Fatalf("list transfers: %v", err)
+		t.Fatalf("find file log: %v", err)
 	}
-	if total != 1 {
-		t.Fatalf("transfer count = %d, want 1", total)
+	if ft == nil || ft.Status != storage.FileLogStatusSuccess {
+		t.Fatalf("status = %q, want success", ft.Status)
 	}
 }
 
